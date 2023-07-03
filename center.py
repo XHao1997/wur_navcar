@@ -15,7 +15,7 @@ import threading
 from queue import Queue
 import time
 from queue import Queue
-  
+from remoted_car import remoted_car
 # Initializing a queue
 q = Queue(maxsize = 3)
   
@@ -34,7 +34,7 @@ depth_stream.start()
 #outfile = open("depth-"+str(datetime.timestamp(datetime.now())) + ".hex","wb")
 
 camera0 =  camera()
-
+car = remoted_car()
 def camera_pusher():
     while True:
         dist = camera0.get_center_dist(depth_stream)
@@ -44,8 +44,9 @@ def camera_pusher():
 def car_listener():
     while True:
         dist = q.get()
-
-        print("listen:{:.3f}m".format(dist))
+        car.get_c(dist)
+        car.move()
+        # print("listen:{:.3f}m".format(dist))
     
     
 thread_camera = threading.Thread(target=camera_pusher)
