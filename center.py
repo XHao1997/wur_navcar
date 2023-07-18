@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 from openni import openni2
-import cv2
+# import cv2
 from datetime import datetime
 import platform
-import numpy as np
+# import numpy as np
 import array
 from PIL import Image
-from mpl_toolkits import mplot3d
-import matplotlib.pyplot as plt
-from matplotlib import cm
+# from mpl_toolkits import mplot3d
+# import matplotlib.pyplot as plt
+# from matplotlib import cm
 from camera import camera
 import threading
 from queue import Queue

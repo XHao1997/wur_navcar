@@ -1,7 +1,7 @@
 from openni import openni2
-import cv2
-from datetime import datetime
-import platform
+# import cv2
+# from datetime import datetime
+# import platform
 import numpy as np
 
 class camera:
