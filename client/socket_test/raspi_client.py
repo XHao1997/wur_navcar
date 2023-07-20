@@ -1,7 +1,7 @@
 import socket
 import struct
 
-HOST = '192.168.1.101'
+HOST = '192.168.1.103'
 PORT = 8888
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
