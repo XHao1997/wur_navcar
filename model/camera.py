@@ -1,11 +1,13 @@
-from openni import openni2
-# import cv2
-# from datetime import datetime
-# import platform
 import numpy as np
 
 class camera:
     def __init__(self):
+
+        self.cx = 0
+        self.cy = 0
+        self.z = 0
+        self.cx = 0
+        self.cx = 0
         return
 
     def get_center_dist(self,depth_stream):
