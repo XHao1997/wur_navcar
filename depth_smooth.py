@@ -1,17 +1,11 @@
-import os
 from time import time
-import joblib
-from glob import glob
-from functools import partial
 import cv2
 from kinect_smoothing import HoleFilling_Filter, Denoising_Filter
-from kinect_smoothing import Crop_Filter, Smooth_Filter, Motion_Sampler
-from kinect_smoothing.utils import plot_image_frame
 
 def standard_pipeline(image_frame):
-    hole_filter = HoleFilling_Filter(flag='mode', min_valid_depth=50, min_valid_neighbors=5,radius=0.2)
+    hole_filter = HoleFilling_Filter(flag='mode', min_valid_depth=150, min_valid_neighbors=5,radius=5)
     image_frame = hole_filter.smooth_image(image_frame)
-    hole_filter = HoleFilling_Filter(flag='ns', min_valid_depth=0, max_valid_depth=255., radius=1)
+    hole_filter = HoleFilling_Filter(flag='ns', min_valid_depth=0, max_valid_depth=255., radius=0.1)
     image_frame = hole_filter.smooth_image(image_frame)
     noise_filter = Denoising_Filter(flag='gaussian')
     image_frame = noise_filter.smooth_image(image_frame)

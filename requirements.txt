@@ -1,3 +1,9 @@
-numpy
-scipy
-pykalman
+numpy~=1.26.3
+scipy~=1.11.4
+pykalman~=0.9.5
+pillow~=10.2.0
+matplotlib~=3.8.2
+opencv-python~=4.9.0.80
+torch~=2.1.2
+torchvision~=0.16.2
+ultralytics~=8.1.2
