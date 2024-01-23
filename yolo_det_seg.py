@@ -63,8 +63,7 @@ model.overrides['max_det'] = 5  # maximum number of detections per image
 model_type = "vit_t"
 sam_checkpoint = "weights/mobile_sam1.pt"
 mobile_sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-mobile_sam.to(device=device)
-mobile_sam.eval()
+# mobile_sam.eval()
 predictor = SamPredictor(mobile_sam)
 predictor.set_image(image)
 # set image
