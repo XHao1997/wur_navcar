@@ -187,8 +187,8 @@ class Denoising_Filter(object):
 	"""
 	Denoising filter can be used to improve the resolution of the depth image
 	"""
-	def __init__(self, flag='modeling',theta=30, threshold=10,depth_min=120,depth_max=255,
-	             ksize=5, sigma=0.1,niter=500,kappa=50,gamma=.25,option=2):
+	def __init__(self, flag='modeling',theta=30, threshold=10,depth_min=100,depth_max=4000,
+	             ksize=5, sigma=0.1,niter=1,kappa=50,gamma=1,option=1):
 		"""
 		:param flag: string, specific methods for denoising.
 				'modeling': filter with Kinect V2 noise model,  'Modeling Kinect Sensor Noise for Improved 3D Reconstruction and Tracking'
@@ -210,7 +210,7 @@ class Denoising_Filter(object):
 		        2: Perona Malik diffusion equation No. 2
 		"""
 		self.flag=flag
-		self.f_x = 580 #focal length of the Kinect camera in pixel
+		self.f_x = 585 #focal length of the Kinect camera in pixel
 		if flag=='modeling' or flag=='modeling_pf':
 			self.threshold = threshold
 			self.depth_min = depth_min
@@ -292,7 +292,7 @@ class Denoising_Filter(object):
 		return sigma
 
 
-	def anisotropic_filter(self,img,niter=200,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=2):
+	def anisotropic_filter(self,img,niter=1,kappa=50,gamma=0.1,step=(1.,1.),sigma=0, option=1):
 		"""
 		Anisotropic diffusion.
 		usage: imgout = anisodiff(im, niter, kappa, gamma, option)
