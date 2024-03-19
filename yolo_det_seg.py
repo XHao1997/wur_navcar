@@ -32,7 +32,7 @@ def remove_small_cnt(masks_final):
     contours_final = []
     for i in range(0, len(contours)):
         area = cv2.contourArea(contours[i])
-        if area > cv2.contourArea(bigger) / 5:
+        if area > cv2.contourArea(bigger) / 10:
             contours_final.append(contours[i])
     return contours_final
 
@@ -49,16 +49,23 @@ def show(imgs):
 
 # configure device and input image
 device = "cpu"
-path = 'data/leaf_test/leaf_test2.jpg'
-image = cv2.imread(path).astype(np.uint8)
+path = 'test_img/rgb_4040.jpg'
+image = cv2.imread(path).astype(np.uint8)[150:550,100:400]
+# plt.imshow(image)
+# plt.show()
+print(image.shape)
 image = cv2.resize(image, (640, 480))
+plt.imshow(image)
+plt.show()
 # load model
 model = YOLO('weights/best.pt')
 # set model parameters
-model.overrides['conf'] = 0.4  # NMS confidence threshold
-model.overrides['iou'] = 0.2  # NMS IoU threshold
+# set model parameters
+model.overrides['conf'] = 0.25  # NMS confidence threshold
+model.overrides['iou'] = 0.25  # NMS IoU threshold
 model.overrides['agnostic_nms'] = True  # NMS class-agnostic
-model.overrides['max_det'] = 5  # maximum number of detections per image
+model.overrides['max_det'] = 10  # maximum number of detections per image
+
 
 model_type = "vit_t"
 sam_checkpoint = "weights/mobile_sam1.pt"
@@ -71,7 +78,7 @@ predictor.set_image(image)
 # perform inference
 results = model.predict(image)
 input_box = convert_bbox2xyxy(results)
-
+print(input_box)
 centers = np.zeros((input_box.shape[0], 2))
 for i, box in enumerate(input_box):
     center_x, center_y = box[0] / 2 + box[2] / 2, box[1] / 2 + box[3] / 2
@@ -84,7 +91,7 @@ for i, center in enumerate(centers):
         point_coords=center.reshape(1, 2),
         box=input_box[i],
         point_labels=[1],
-        multimask_output=True)
+        multimask_output=False)
     masks = (np.moveaxis(masks, 0, -1)).astype(np.uint8)
     best_mask = masks[:, :, np.argmax(scores)]
     if i == 0:
@@ -96,7 +103,9 @@ for i, center in enumerate(centers):
 
 cv2.imshow("binary2", masks_final)
 
+# contours_final = remove_small_cnt(masks_final)
 contours_final = remove_small_cnt(masks_final)
+
 # Create a new binary mask with only the biggest contour
 new_mask = np.zeros_like(masks_final)
 masks = cv2.drawContours(new_mask, contours_final, -1, (255, 255, 255), thickness=cv2.FILLED).astype(np.uint8)
