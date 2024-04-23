@@ -1,0 +1,19 @@
+import RPi.GPIO as gpio
+import time
+gpio.setwarnings(False)
+
+gpio.setmode(gpio.BCM)
+
+ENB = 13
+INT = 6
+gpio.setup(INT,gpio.OUT)
+gpio.setup(ENB,gpio.OUT)
+gpio.output(INT,gpio.)
+pwm2 = gpio.PWM(ENB, 20000)
+pwm2.start(5)
+
+
+while 1:
+        pwm2.ChangeDutyCycle(90)
+        pwm2.ChangeDutyCycle(90)
+        time.sleep(3)
