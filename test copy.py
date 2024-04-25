@@ -29,7 +29,6 @@ def pretty_depth(depth):
     print(dist[315:325,235:245])
     depth>>=2
     depth=depth.astype(np.uint8)
-    
     return depth, dist
 
 
