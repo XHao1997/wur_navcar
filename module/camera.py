@@ -1,47 +1,18 @@
 #!/usr/bin/env python
+import os
+import sys
+PROJECT_PATH = os.getcwd()
+SOURCE_PATH = os.path.join(
+    PROJECT_PATH
+)
+sys.path.append(SOURCE_PATH)
+
 import cv2
 import numpy as np
-import time
 import open3d as o3d
 import freenect
-import frame_convert2
-def filter_roi_in_pcd(rgb_img, rgb_pixel, points_3d):
-    roi_index = []
-    points_3d_color = []
-    for i, v in enumerate(points_3d):
-        u, v = rgb_pixel[i][:2]
-        if u >= 640 or v >= 480:
-            pass
-        elif u < 0 or v < 0:
-            pass
-        else:
-            pc = rgb_img[v, u]
-            if not np.array_equal(pc, np.array([0, 0, 0])):
-                roi_index.append(i)
-                points_3d_color.append(pc)
-    roi_3d = points_3d[roi_index]
-    points_3d_color = np.asarray(points_3d_color)
-    pcd = o3d.geometry.PointCloud()
-    # Assigning the colors
-    pcd.colors = o3d.utility.Vector3dVector(points_3d_color[:, [2, 1, 0]] / 255.0)
-    pcd.points = o3d.utility.Vector3dVector(roi_3d[:, :3])
-    # Visualizing the point cloud
-    cl, ind = pcd.remove_radius_outlier(nb_points=20, radius=100)
-    pcd = cl.select_by_index(ind)
-    cl, ind = pcd.remove_statistical_outlier(nb_neighbors=10,
-                                            std_ratio=0.2)
-    pcd = cl.select_by_index(ind)
-    return pcd
-def create_point3d_from_xyz(x, y, z):
-    # Flatten the matrices
-    X_flat = x.flatten()
-    Y_flat = y.flatten()
-    Z_flat = z.flatten()
-    # Combine into a single array of 3D points
-    points_3d = np.vstack((X_flat, Y_flat, Z_flat)).T
-    # Remove rows where Z < 0
-    points_3d = points_3d[points_3d[:, 2] >= 0]
-    return points_3d
+from utils.freenect import video_cv
+from utils.vision import filter_roi_in_pcd, create_point3d_from_xyz
 class Camera():
     def __init__(self):
         self.ir_intrinsic_matrix = np.array(
@@ -77,6 +48,7 @@ class Camera():
         M = np.float32([[1, 0, 4], [0, 1,3]])
         depth_img = cv2.warpAffine(depth_img, M, (cols, rows))
         return depth_img
+    
     def execute_task(
             self, rgb_img, depth_img,
             task='block',
@@ -115,6 +87,7 @@ class Camera():
         elif task == 'leaf':
             print("not finished yet")
             return
+        
     def map_dist_to_rgb(self, dist_img):
         E = self.A
         K = self.new_rgb_intrinsic_matrix
@@ -131,12 +104,14 @@ class Camera():
         raw_pixel = T_d2rgb.dot(points_3d.T).T
         rgb_pixel = np.round((raw_pixel / (raw_pixel[:, -1]).reshape(-1, 1))).astype(int)
         return rgb_pixel
+    
     def get_distance(self, depth_img):
         # dist = 0.1236 * np.tan((depth_img) / 2842.5 + 1.1863) * 1000-37
         dist = 0.075 * 580 / (1090 - depth_img) * 8*1000
         dist[dist < 500] = 0
         dist[dist >1200] = 0
         return dist
+    
     def pixel_to_world(self, dist_img):
         x = np.tile(np.arange(640), (480, 1))
         y = np.tile(np.arange(480).reshape(-1, 1), (1, 640))
@@ -148,6 +123,7 @@ class Camera():
         X = (x - cx) * (Z) / fx
         Y = (y - cy) * (Z) / fy
         return X, Y, Z
+    
     def undistort(
             self, distorted_img, camera_type):
         # Correcting the distortion
@@ -168,6 +144,7 @@ class Camera():
                 self.ir_distortion_matrix, None,
                 self.new_ir_intrinsic_matrix)  # Correcting the distortion
         return undistorted_img
+    
     def get_block_center(self, img, debug=False):
         """
         Detects the center of the largest connected component in the provided image.
@@ -208,17 +185,26 @@ class Camera():
             cv2.imshow('mask', img_result_hsv)
             cv2.waitKey(0)
         return img_result_hsv
+    
     def get_centroid_coordindate(self, pcd):
         # Assigning the points
         points_array = np.asarray(pcd.points)
         centroid_coordindate = np.median(points_array, axis=0)
         return centroid_coordindate
+    
     def capture_ir_img(self):
         array, _ = freenect.sync_get_video(0, freenect.VIDEO_IR_10BIT)
         return array
+    
     def capture_rgb_img(self):
-        rgb_img = frame_convert2.video_cv(freenect.sync_get_video()[0])[:, :, ::-1]
+        rgb_img = video_cv(freenect.sync_get_video()[0])[:, :, ::-1]
         return rgb_img
+    
     def capture_depth_img(self):
         depth_img = freenect.sync_get_depth()[0]
         return depth_img
+    
+    def show_curent_pcd(self, rgb_img, depth_img):
+        dist = self.get_distance(depth_img)
+        pcd = 
+        return
