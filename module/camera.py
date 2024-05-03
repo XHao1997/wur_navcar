@@ -7,12 +7,12 @@ SOURCE_PATH = os.path.join(
 )
 sys.path.append(SOURCE_PATH)
 
+from multiprocessing.pool import ThreadPool
 import cv2
 import numpy as np
 import open3d as o3d
-import freenect
-from utils.freenect import video_cv
-from utils.vision import filter_roi_in_pcd, create_point3d_from_xyz
+import utils.vision
+import utils.freenect
 class Camera():
     def __init__(self):
         self.ir_intrinsic_matrix = np.array(
@@ -42,7 +42,10 @@ class Camera():
         self.new_ir_intrinsic_matrix = self.ir_intrinsic_matrix
         self.imgsz = [640, 480]
         self.dist_img = None
+        self.pool = ThreadPool(processes=3)
         return
+    
+    # ir to depth offset, reference: https://wiki.ros.org/kinect_calibration/technical
     def prepocess_depth_img(self, depth_img):
         rows, cols = depth_img.shape
         M = np.float32([[1, 0, 4], [0, 1,3]])
@@ -65,13 +68,22 @@ class Camera():
             dist_img = self.get_distance(depth_img)
             # from distance and ir_intrinsic calculate xyz in camera's world frame
             x, y, z = self.pixel_to_world(dist_img)
-            points_3d = create_point3d_from_xyz(x, y, z)
+            points_3d = utils.vision.create_point3d_from_xyz(x, y, z)
             rgb_pixel = self.map_dist_to_rgb(dist_img)
-            block_pcd = filter_roi_in_pcd(roi_img, rgb_pixel, points_3d)
+            block_pcd = utils.vision.filter_roi_in_pcd(roi_img, rgb_pixel, points_3d)
             if debug:
                 FOR1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=100, origin=[0, 0, 0])
                 o3d.visualization.draw_geometries([block_pcd, FOR1])
+            
             block_centroid_coordinate = self.get_centroid_coordindate(block_pcd)
+            # The `get_centroid_coordindate` function is calculating
+            # the centroid coordinate of a point cloud (pcd). It
+            # takes the point cloud as input, converts it to a numpy
+            # array, and then calculates the median of the points
+            # along each axis (x, y, z) to determine the centroid
+            # coordinate in 3D space. The resulting centroid
+            # coordinate represents the center point of the point
+            # cloud data.
             return block_centroid_coordinate
         elif task == 'default':
             depth_img = self.prepocess_depth_img(depth_img)
@@ -80,9 +92,9 @@ class Camera():
             roi_img = rgb_img
             dist_img = self.get_distance(depth_img)
             x, y, z = self.pixel_to_world(dist_img)
-            points_3d = create_point3d_from_xyz(x, y, z)
+            points_3d = utils.vision.create_point3d_from_xyz(x, y, z)
             rgb_pixel = self.map_dist_to_rgb(dist_img)
-            roi_3d, points_3d_color = filter_roi_in_pcd(roi_img, rgb_pixel, points_3d)
+            roi_3d = utils.vision.filter_roi_in_pcd(roi_img, rgb_pixel, points_3d)
             return
         elif task == 'leaf':
             print("not finished yet")
@@ -193,18 +205,13 @@ class Camera():
         return centroid_coordindate
     
     def capture_ir_img(self):
-        array, _ = freenect.sync_get_video(0, freenect.VIDEO_IR_10BIT)
-        return array
+        return utils.freenect.capture_ir_img()
     
-    def capture_rgb_img(self):
-        rgb_img = video_cv(freenect.sync_get_video()[0])[:, :, ::-1]
-        return rgb_img
+    def capture(self):
+        rgb_img = self.pool.apply_async(utils.freenect.capture_rgb_img) # tuple of args for foo
+        depth_img = self.pool.apply_async(utils.freenect.capture_depth_img) # tuple of args for foo
+        return rgb_img, depth_img
     
-    def capture_depth_img(self):
-        depth_img = freenect.sync_get_depth()[0]
-        return depth_img
-    
-    def show_curent_pcd(self, rgb_img, depth_img):
-        dist = self.get_distance(depth_img)
-        pcd = 
-        return
+    def close(self):
+        self.pool.close()
+        self.pool.join()

@@ -18,10 +18,10 @@ def convert_to_xyxy(result):
 
 
 # Define a function to draw rectangles on the image
-def draw_rect(ax, result, color='r'):
+def draw_rect(ax, result, leaf_index, color='r'):
     rect = patches.Rectangle((result.x, result.y), result.width, result.height, linewidth=2, edgecolor=color, facecolor='none')
     ax.add_patch(rect)
-    ax.text(result.x, result.y - 5, result.name, fontsize=8, color=color)
+    ax.text(result.x, result.y - 5, result.name+str(leaf_index), fontsize=10, color=color)
     return 
 
 def remove_small_cnt(masks_final):
@@ -35,3 +35,8 @@ def remove_small_cnt(masks_final):
         if area > cv2.contourArea(bigger) / 10:
             contours_final.append(contours[i])
     return contours_final
+
+def show_curent_pcd(self, rgb_img, depth_img):
+    dist = self.get_distance(depth_img)
+    pcd = None
+    pass

@@ -17,8 +17,6 @@ def draw_incircle(mask,cnts):
     return mask
 
 def get_cnts(mask):    
-    mask = cv2.resize(mask, (640,480), interpolation = cv2.INTER_LINEAR )
-    mask = mask[:,:,0]
     mask_copy = copy.deepcopy(mask)
     contours, _ = cv2.findContours(mask_copy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)   
     return contours
@@ -58,14 +56,14 @@ def find_furthest_points(cnt):
         if max_dist>max_dist_prev:
             max_index = [i, np.argmax(np.linalg.norm(cnt-points,axis=1))]
         max_dist_prev = max_dist
-    print(max_index)
     return max_index
 def find_midpoint(point1, point2):
+    point1 = point1.ravel()
+    point2 = point2.ravel()
     return np.array([(point1[0] + point2[0]) / 2, (point1[1] + point2[1]) /2])  
 
 def find_y_intercept(mid_point, slope):
     return mid_point[1] - slope * mid_point[0]
-
 
 def calculate_slope(point1, point2):
     slope = (point2[1] - point1[1]) / (point2[0] - point1[0]) if point2[0] != point1[0] else float('inf')
@@ -95,11 +93,23 @@ def draw_leaf_corner(corners, mask):
         cv2.circle(mask1, point.astype(int), 5, (255, 0, 255), -1)  # Red point
     return mask1
 
-def get_leaf_center(leaf_contour):
-    leaf_center = get_leaf_corner(leaf_contour)[-1]
-    return leaf_center
+def get_leaf_center(mask, leaf_index=-1):
+    contours = get_cnts(mask)
+    leaf_centers = []
+    if leaf_index!=-1:
+        cnt = contours[leaf_index]
+        cnt = cnt.reshape(-1,2)
+        leaf_centers.append(get_leaf_corner(cnt)[-1]) 
+    else:
+        for cnt in contours:
+            for cnt in contours:
+                cnt = cnt.reshape(-1,2)
+                leaf_center = get_leaf_corner(cnt)[-1]
+                leaf_centers.append(leaf_center)
+    return leaf_centers
     
 def draw_circle(point, image, size=5):
-    cv2.circle(image, point, int(size), (255, 255, 255), thickness=-1)
+    x,y = point.astype(np.int16)
+    cv2.circle(image, (x,y), int(size), (255, 255, 255), thickness=-1)
     return image
     

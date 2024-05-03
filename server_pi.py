@@ -1,9 +1,24 @@
+import os
+import sys
+from PIL import Image
+PROJECT_PATH = os.getcwd()
+SOURCE_PATH = os.path.join(
+    PROJECT_PATH
+)
+sys.path.append(SOURCE_PATH)
 import socket
 from module.camera import Camera
 import numpy as np
 import pickle
 from module.cam_server import CamServer
 from utils.file import save_file
+import utils.leaf
+from module.AI_model import AI_model_factory,Yolo,Mobile_SAM
+
+creator = AI_model_factory()
+yolo = creator.create_model(Yolo)
+mobile_sam = creator.create_model(Mobile_SAM)
+
 # Define task constants
 ACTION_DONE = 10
 END = 0
@@ -98,8 +113,14 @@ while True:
         if data == 'capture':
             for i in range(5):    
                 print(i)
-                rgb_img = kinect.capture_rgb_img()
-                depth_img = kinect.capture_depth_img()
+                rgb_img, depth_img= kinect.capture()
+                yolo_results = yolo.predict(rgb_img)
+                sam_results = mobile_sam.predict(rgb_img,yolo_results)
+                mask = np.zeros_like(sam_results)
+                point = utils.leaf.get_leaf_center(sam_results,0)
+                # print(point)
+                for p in point:
+                    mask= utils.leaf.draw_circle(p, mask)
                 leaf_center = kinect.execute_task(rgb_img, depth_img, 'block')
                 leaf_centers.append(leaf_center)
             leaf_center = np.round(np.median(leaf_centers,axis=0)).tolist()

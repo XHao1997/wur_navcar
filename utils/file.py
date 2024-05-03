@@ -21,14 +21,15 @@ def find_file_maxnum(directory):
 def set_file_name(directories, key):
     filename = None
     max_num = find_file_maxnum(directories[key])
-    if key == 'rgb':
-        filename = f"rgb_{max_num + 1:02d}.png"
-    elif key == 'depth':
-        filename = f"depth_{max_num + 1:02d}.png"
-    elif key == 'eye_to_hand':
-        filename = f"eye_to_hand_{max_num + 1:02d}"      
-    elif key == 'joint1_nn':
-        filename = f"joint1_nn_{max_num + 1:02d}"
+    # if key == 'rgb':
+    #     filename = f"{key}_{max_num + 1:02d}.png"
+    # elif key == 'depth':
+    #     filename = f"depth_{max_num + 1:02d}.png"
+    # elif key == 'eye_to_hand':
+    #     filename = f"eye_to_hand_{max_num + 1:02d}"      
+    # elif key == 'joint1_nn':
+    #     filename = f"joint1_nn_{max_num + 1:02d}"
+    filename = f"{key}_{max_num + 1:02d}.png"
     return filename   
 
 def save_file(directories, file, key):
@@ -36,6 +37,8 @@ def save_file(directories, file, key):
     if key == 'rgb':
         cv2.imwrite(os.path.join(directories[key], filename),file)
     elif key == 'depth':
+        cv2.imwrite(os.path.join(directories[key], filename),file)
+    elif key == 'seg':
         cv2.imwrite(os.path.join(directories[key], filename),file)
     elif key == 'eye_to_hand':
         filename = np.save(os.path.join(directories[key], filename),file)  

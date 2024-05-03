@@ -117,8 +117,8 @@ class Yolo(AI_model):
         image = np.array(image)    
         # Display the image
         ax.imshow(image)
-        for detection in results:
-            draw_rect(ax, detection)
+        for i,detection in enumerate(results):
+            draw_rect(ax, detection, i+1)
         # Show the plot
         plt.show()
 

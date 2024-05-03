@@ -5,7 +5,7 @@ class CamServer():
         self.camera = Camera()
         self.yolo = AI_model_factory.create(Yolo)
         self.sam = AI_model_factory.create(Mobile_SAM)
-    
+        self.yolo_results
     def detect_leaf(self):
         image = self.camera.capture_rgb_img()
         return self.yolo.predict(image)
