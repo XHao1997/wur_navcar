@@ -1,47 +1,28 @@
+#!/usr/bin/env python
 import os
 import sys
-from PIL import Image
-import PIL.Image as pimg
-import time
+import cv2
 PROJECT_PATH = os.getcwd()
 SOURCE_PATH = os.path.join(
     PROJECT_PATH
 )
 sys.path.append(SOURCE_PATH)
 import matplotlib.pyplot as plt
-PROJECT_PATH = os.getcwd()
-SOURCE_PATH = os.path.join(
-    PROJECT_PATH
-)
-from utils.freenect import video_cv
-import freenect
-import cv2
 
-def capture_rgb_img():
-    rgb_img = video_cv(freenect.sync_get_video()[0])[:, :, ::-1]
-    return rgb_img
-def capture_depth_img():
-    depth_img = freenect.sync_get_depth()[0]
-    
-    return depth_img
-from multiprocessing.pool import ThreadPool
-cv2.namedWindow('Video')
-cv2.namedWindow('Depth')
+from module.cam_server import CamServer
+from module.camera import Camera
 
-pool = ThreadPool(processes=3)
-
-
+from utils import image_process, file
+import time    
+server = CamServer()
+server.run()
 while True:
-    async_result = pool.apply_async(capture_rgb_img) # tuple of args for foo
-    async_result2 = pool.apply_async(capture_depth_img) # tuple of args for foo
-    cv2.imshow('Depth', async_result2.get())
-    
-    cv2.imshow('Video', async_result.get())
-    ch = cv2.waitKey(25)
-    if ch== ord('q'):
+    yolo_result = server.get_detection_result()
+    image = yolo_result['image']
+    image = image_process.draw_yolo_frame_cv(image,yolo_result)
+    cv2.namedWindow('yolo')
+    cv2.imshow('yolo', image)
+    if cv2.waitKey(1) & 0xFF == ord('q'): 
+        cv2.destroyWindow('yolo') 
+        server.stop()
         break
-    # data.show()
-    # print(async_result2.get())
-    
-pool.close()
-pool.join()

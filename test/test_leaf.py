@@ -13,7 +13,7 @@ import cv2
 from module.AI_model import AI_model_factory,Yolo,Mobile_SAM
 from utils.leaf import get_leaf_center, draw_circle
 from utils.file import save_file
-
+import utils.leaf
 # Directory where files are saved
 directories = {
     'rgb': 'rgb_cali/',
@@ -22,23 +22,25 @@ directories = {
     'joint1': 'joint1_nn/',
     'seg': 'seg/'
 }
+path = 'rgb_cali/rgb_81.png'
+image = Image.open(path)
+
+# This code snippet is performing the following tasks:
+# This code snippet is creating instances of AI models using a factory design pattern.
 creator = AI_model_factory()
+# `yolo = creator.create_model(Yolo)` and `mobile_sam = creator.create_model(Mobile_SAM)` are creating
+# instances of AI models using a factory design pattern.
 yolo = creator.create_model(Yolo)
 mobile_sam = creator.create_model(Mobile_SAM)
 
-path = 'rgb_cali/rgb_81.png'
-image = Image.open(path)
+# `yolo_results = yolo.predict(image)` is calling the `predict` method 
+# detection model) to make predictions on the input image. 
+# The result of this prediction is stored as a list of Detector Classthe
 yolo_results = yolo.predict(image)
+
 yolo.visualise_result(image, yolo_results)
-sam_results = mobile_sam.predict(image,yolo_results)
-# # save_file(directories,sam_results,'seg')
-# sam_results = cv2.imread('seg/seg_02.png',cv2.IMREAD_GRAYSCALE )
-# plt.imshow(sam_results)
-# # plt.show()
-mask = np.zeros_like(sam_results)
-point = get_leaf_center(sam_results,0)
-# print(point)
-for p in point:
-    mask= draw_circle(p, mask)
-plt.imshow(mask)
-plt.show()
+chosen_leaf = utils.leaf.choose_leaf(yolo_results, 2)
+
+sam_results = mobile_sam.predict(image, chosen_leaf)
+mobile_sam.visualise_result(image,sam_results)
+

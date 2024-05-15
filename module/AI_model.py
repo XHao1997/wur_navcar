@@ -7,90 +7,52 @@ SOURCE_PATH = os.path.join(
 )
 sys.path.append(SOURCE_PATH)
 
-from abc import ABC, abstractmethod
 import warnings
 warnings.simplefilter('ignore')
 from mobile_sam import sam_model_registry, SamPredictor
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from utils.image_processing import convert_to_xyxy, remove_small_cnt, draw_rect
+from utils.image_process import convert_to_xyxy, remove_small_cnt 
 from pathlib import Path
 from onnxruntime import InferenceSession
 from yolonnx.services import Detector
 from yolonnx.to_tensor_strategies import PillowToTensorContainStrategy
+import time
+from threading import Thread, Lock
+from PIL import Image
+import copy
+from ultralytics import YOLO
 
-class AI_model_factory():
-    """
-    Factory class for creating AI models.
-    """
-    def create_model(self, AI_model: type[AI_model]) -> AI_model:
-        """
-        Create an instance of an AI model.
-
-        Args:
-            AI_model (type[AI_model]): The type of AI model to create.
-
-        Returns:
-            AI_model: An instance of the specified AI model.
-        """
-        model = AI_model()
-        return model
-
-class AI_model(ABC):
-    """
-    Abstract base class for AI models.
-    """
-    @abstractmethod
-    def __init__(self):
-        self.model = None
-
-    @abstractmethod
-    def predict(self, image: np.ndarray, **kwargs) -> np.ndarray:
-        """
-        Make predictions using the AI model.
-
-        Args:
-            image (np.ndarray): The input image.
-            **kwargs: Additional keyword arguments specific to the model.
-
-        Returns:
-            np.ndarray: The prediction result.
-        """
-        pass
-
-    @abstractmethod
-    def visualise_result(self, image: np.ndarray, result: np.ndarray) -> None:
-        """
-        Visualise the prediction result.
-
-        Args:
-            image (np.ndarray): The input image.
-            result (np.ndarray): The prediction result.
-        """
-        pass
-
-class Yolo(AI_model):
+class Yolo():
     """
     YOLO model for object detection.
     """
-    def __init__(self):
+    def __init__(self, frame_queue):
         """
-        Initialize the YOLO model.
+        Initialize the YOLO model by onnx format.
         """
+        model_det_path = Path("weights/best.onnx")
+        model_seg_path = Path("weights/best_seg.pt")
         
-        model = Path("weights/best.onnx")
         session = InferenceSession(
-                                    model.as_posix(),
+                                    model_det_path.as_posix(),
                                     providers=[
                                                 "CUDAExecutionProvider",
                                                 "CPUExecutionProvider",
                                                 ],
                                     )
-        predictor = Detector(session, PillowToTensorContainStrategy())
-        self.model = predictor.run
-
-    def predict(self, image: np.ndarray) -> list:
+        predictor = Detector(session, PillowToTensorContainStrategy(), 0.6, 0.4)
+        ############################# load detect and segment model #########################
+        self.model_det = predictor.run
+        self.model_seg = YOLO(model_seg_path)
+        # for sending data from camera
+        self.frame_queue = frame_queue  # queue for each fps prediction
+        self.is_running = False  # status
+        self.fps = 0.0  # real-time fps
+        self.__t_last = time.time() * 1000
+        self.__data = {} 
+        
+    def predict(self, image: np.ndarray, task='detect') -> list:
         """
         Make predictions using the YOLO model.
 
@@ -98,31 +60,43 @@ class Yolo(AI_model):
             image (np.ndarray): The input image.
 
         Returns:
-            np.ndarray: The prediction result.
+            list: The prediction result containing Detector class.
         """
-        results = self.model(image)
+        print('yolo_start')
+        image_yolo = Image.fromarray(image)
+        results = self.model_det(image_yolo)
+        print('yolo_end')
+        
         return results
 
-    def visualise_result(self, image: np.ndarray, results: np.ndarray) -> None:
-        """
-        Visualise the prediction result.
+    def __capture_queue(self, image, depth_img):
+        # capture image
+        self.__t_last = time.time() * 1000
+        lock = Lock()
+        while self.is_running:
+            with lock:
+                result = self.predict(image)
+                t  = time.time() * 1000
+                t_span = t - self.__t_last                
+                self.fps = 1000.0 / t_span
+                self.__data['result'] = result
+                self.__data["fps"] = self.fps
+                self.__data["image"] = image
+                self.__data["depth"] = depth_img
+                self.frame_queue.put(self.__data)
+                self.__t_last = t
 
-        Args:
-            image (np.ndarray): The input image.
-            results (np.ndarray): The prediction result.
-        """
-        # Draw rectangles for each detection result
-        # Create figure and axis
-        fig, ax = plt.subplots()
-        image = np.array(image)    
-        # Display the image
-        ax.imshow(image)
-        for i,detection in enumerate(results):
-            draw_rect(ax, detection, i+1)
-        # Show the plot
-        plt.show()
+    def run(self, image, depth_img):
+        self.is_running = True
+        self.thread_capture = Thread(target=self.__capture_queue,args=(image,depth_img))
+        self.thread_capture.start()
 
-class Mobile_SAM(AI_model):
+    def stop(self):
+        self.is_running = False
+        self.thread_capture.join()
+
+
+class Mobile_SAM():
     """
     Mobile SAM model for image segmentation.
     """
@@ -147,16 +121,14 @@ class Mobile_SAM(AI_model):
             np.ndarray: The prediction result.
         """
         # Store xyxy bounding boxes in a list
+        print("segment anything!!!\n")
         image = np.array(image)
+        self.model.set_image(image)
         bbox_list = np.asarray([convert_to_xyxy(result) for result in yolo_results])
-
         centers = np.zeros((bbox_list.shape[0], 2))
-
         for i, box in enumerate(bbox_list):
             center_x, center_y = box[0] / 2 + box[2] / 2, box[1] / 2 + box[3] / 2
             centers[i, :] = np.array([center_x, center_y])
-
-        self.model.set_image(image)
         for i, center in enumerate(centers):
             masks, scores, logits = self.model.predict(
                                 point_coords=center.reshape(1, 2),
@@ -169,24 +141,10 @@ class Mobile_SAM(AI_model):
                 masks_final = best_mask
             else:
                 masks_final += best_mask
-        result = masks_final
+        
+        contours_final = remove_small_cnt(masks_final)
+        result = np.zeros_like(masks_final)
+        result = cv2.drawContours(result, contours_final, -1, (255, 255, 255), 
+                                    thickness=cv2.FILLED).astype(np.uint8)
         return result
 
-    def visualise_result(self,image: np.ndarray, result: np.ndarray) -> None:
-        """
-        Visualise the prediction result.
-
-        Args:
-            image (np.ndarray): The input image.
-            result (np.ndarray): The prediction result.
-        """
-        image = np.array(image)
-        contours_final = remove_small_cnt(result)
-        new_mask = np.zeros_like(result)
-        masks = cv2.drawContours(new_mask, contours_final, -1, (255, 255, 255), thickness=cv2.FILLED).astype(np.uint8)
-        cv2.drawContours(masks, contours_final, -1, (255, 255, 255), cv2.FILLED)
-        cv2.drawContours(image=image, contours=contours_final, contourIdx=-1, color=(0, 255, 0), thickness=2,
-                        lineType=cv2.LINE_AA)
-        cv2.bitwise_and(image, image, mask=masks)
-        plt.imshow(image)
-        plt.show()
