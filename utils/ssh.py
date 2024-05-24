@@ -30,14 +30,17 @@ def print_ssh_exec_cmd_return(_ssh_fd, _cmd):
             print('ERROR:' + err_content.strip())  # Strip to remove leading/trailing whitespace
         exit()  # Exit the program if there are errors
     with stdout as f:
-        bytes = f.read()
-    for line in bytes.splitlines():
+        bytes_read = f.read()
+    for line in bytes_read.splitlines():
         print(line.decode('utf-8'))
 
 def run_remote_stream():
     sshd = ssh_connect('192.168.101.12', 'hao', '333338')
     print_ssh_exec_cmd_return(sshd, 'sudo pkill python')
-    ssh_exec_cmd(sshd, r' /home/hao/Desktop/wur_navcar/remote_car/bin/python /home/hao/Desktop/wur_navcar/test/test_zmq.py')
+    ssh_exec_cmd(sshd, r'/home/hao/Desktop/wur_navcar/remote_car/bin/python '
+                       r'/home/hao/Desktop/wur_navcar/test/test_zmq.py')
+
+
 
 
 

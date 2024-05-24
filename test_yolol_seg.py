@@ -12,7 +12,7 @@ SOURCE_PATH = os.path.join(
 )
 sys.path.append(SOURCE_PATH)
 from utils import leaf, image_process
-from module.AI_model import Yolo, Mobile_SAM
+from module.AI_model import Yolo, MobileSAM
 from module.kinect import Kinect 
 kinect = Kinect()
 # Directory where files are saved
@@ -27,7 +27,7 @@ depth_image = cv2.imread('depth_81.png',cv2.IMREAD_UNCHANGED)
 rgb_img = cv2.imread('rgb_81.png').astype(np.uint8)
 image_yolo = PIL.Image.fromarray(rgb_img)
 yolo = Yolo()
-sam = Mobile_SAM()
+sam = MobileSAM()
 
 
 yolo_result = yolo.predict(image_yolo)

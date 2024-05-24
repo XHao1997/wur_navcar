@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import sys
+
 PROJECT_PATH = os.getcwd()
 SOURCE_PATH = os.path.join(
     PROJECT_PATH
@@ -15,29 +16,32 @@ from pathlib import Path
 from onnxruntime import InferenceSession
 from yolonnx.services import Detector
 from yolonnx.to_tensor_strategies import PillowToTensorContainStrategy
+from utils import image_process
+import PIL.Image
 
 
 class Yolo():
     """
     YOLO model for object detection.
     """
+
     def __init__(self):
         """
         Initialize the YOLO model.
         """
-        
+
         model = Path("weights/best.onnx")
         session = InferenceSession(
-                                    model.as_posix(),
-                                    providers=[
-                                                "CUDAExecutionProvider",
-                                                "CPUExecutionProvider",
-                                                ],
-                                    )
+            model.as_posix(),
+            providers=[
+                "AzureExecutionProvider",
+                "CPUExecutionProvider",
+            ],
+        )
         predictor = Detector(session, PillowToTensorContainStrategy())
         self.model = predictor.run
 
-    def predict(self, image: np.ndarray) -> list:
+    def predict(self, image: np.ndarray) -> (list, np.array):
         """
         Make predictions using the YOLO model.
 
@@ -47,10 +51,12 @@ class Yolo():
         Returns:
             np.ndarray: The prediction result.
         """
-        results = self.model(image)
+        image_yolo = PIL.Image.fromarray(image)
+        results = self.model(image_yolo)
         return results
 
-    def visualise_result(self, image: np.ndarray, results: np.ndarray) -> None:
+    @staticmethod
+    def visualise_result(image: np.ndarray, results: np.ndarray) -> None:
         """
         Visualise the prediction result.
 
@@ -61,18 +67,24 @@ class Yolo():
         # Draw rectangles for each detection result
         # Create figure and axis
         fig, ax = plt.subplots()
-        image = np.array(image)    
+        image = np.array(image)
         # Display the image
         ax.imshow(image)
-        for i,detection in enumerate(results):
-            draw_yolo_fram_plt(ax, detection, i+1)
+        for i, detection in enumerate(results):
+            draw_yolo_fram_plt(ax, detection, i + 1)
         # Show the plot
         plt.show()
 
-class Mobile_SAM():
+    @staticmethod
+    def get_image_with_bbox(image: np.ndarray, results: np):
+        return image_process.draw_yolo_frame_cv(image, results)
+
+
+class MobileSAM:
     """
     Mobile SAM model for image segmentation.
     """
+
     def __init__(self):
         """
         Initialize the Mobile SAM model.
@@ -82,7 +94,7 @@ class Mobile_SAM():
         mobile_sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
         self.model = SamPredictor(mobile_sam)
 
-    def predict(self, image: np.ndarray, yolo_results: np.ndarray) -> np.ndarray:
+    def predict(self, image: np.ndarray, yolo_results: list):
         """
         Make predictions using the Mobile SAM model.
 
@@ -104,24 +116,25 @@ class Mobile_SAM():
             centers[i, :] = np.array([center_x, center_y])
         for i, center in enumerate(centers):
             masks, scores, logits = self.model.predict(
-                                point_coords=center.reshape(1, 2),
-                                box=bbox_list[i],
-                                point_labels=[1],
-                                multimask_output=False)
+                point_coords=center.reshape(1, 2),
+                box=bbox_list[i],
+                point_labels=[1],
+                multimask_output=False)
             masks = (np.moveaxis(masks, 0, -1)).astype(np.uint8)
             best_mask = masks[:, :, np.argmax(scores)]
             if i == 0:
                 masks_final = best_mask
             else:
                 masks_final += best_mask
-        
+
         contours_final = remove_small_cnt(masks_final)
         result = np.zeros_like(masks_final)
-        result = cv2.drawContours(result, contours_final, -1, (255, 255, 255), 
-                                    thickness=cv2.FILLED).astype(np.uint8)
+        result = cv2.drawContours(result, contours_final, -1, (255, 255, 255),
+                                  thickness=-1).astype(np.uint8)
         return result
 
-    def visualise_result(self,image: np.ndarray, result: np.ndarray) -> None:
+    @staticmethod
+    def visualise_result(image: np.ndarray, result: np.ndarray) -> None:
         """
         Visualise the prediction result.
 
@@ -135,7 +148,7 @@ class Mobile_SAM():
         masks = cv2.drawContours(new_mask, contours_final, -1, (255, 255, 255), thickness=cv2.FILLED).astype(np.uint8)
         cv2.drawContours(masks, contours_final, -1, (255, 255, 255), cv2.FILLED)
         cv2.drawContours(image=image, contours=contours_final, contourIdx=-1, color=(0, 255, 0), thickness=2,
-                        lineType=cv2.LINE_AA)
+                         lineType=cv2.LINE_AA)
         cv2.bitwise_and(image, image, mask=masks)
         plt.imshow(image)
         plt.show()

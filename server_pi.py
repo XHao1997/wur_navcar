@@ -13,11 +13,11 @@ import pickle
 from module.cam_server import CamServer
 from utils.file import save_file
 import utils.leaf
-from module.AI_model import AI_model_factory,Yolo,Mobile_SAM
+from module.AI_model import AI_model_factory,Yolo,MobileSAM
 
 creator = AI_model_factory()
 yolo = creator.create_model(Yolo)
-mobile_sam = creator.create_model(Mobile_SAM)
+mobile_sam = creator.create_model(MobileSAM)
 
 # Define task constants
 ACTION_DONE = 10

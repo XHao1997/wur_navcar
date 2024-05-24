@@ -2,7 +2,8 @@ import numpy as np
 import cv2
 import copy
 
-def get_cnts(mask):    
+
+def get_cnts(mask):
     """
     The function `get_cnts` takes a mask image as input, finds contours in the mask image using OpenCV,
     and returns the contours.
@@ -17,22 +18,24 @@ def get_cnts(mask):
         Contours of the mask are being returned.
     """
     mask_copy = copy.deepcopy(mask)
-    contours, _ = cv2.findContours(mask_copy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)   
+    contours, _ = cv2.findContours(mask_copy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
     return contours
 
+
 def get_optimal_picking_points(contours, corner_list):
-    optimal_points=[]
+    optimal_points = []
     for cnt, corner in zip(contours, corner_list):
-        cnt = cnt.reshape(-1,2)
-        corner = np.asarray(corner).reshape(-1,2)
-        corners_left = corner[np.argmin(corner[:,0])]
-        corners_down = corner[np.argmax(corner[:,1])]
-        optimal_points.append(cnt[np.argmin(np.linalg.norm(cnt-corners_left,axis=1))])
-        optimal_points.append(cnt[np.argmin(np.linalg.norm(cnt-corners_down,axis=1))]) 
-    optimal_points = np.asarray(optimal_points).reshape(-1,2)    
+        cnt = cnt.reshape(-1, 2)
+        corner = np.asarray(corner).reshape(-1, 2)
+        corners_left = corner[np.argmin(corner[:, 0])]
+        corners_down = corner[np.argmax(corner[:, 1])]
+        optimal_points.append(cnt[np.argmin(np.linalg.norm(cnt - corners_left, axis=1))])
+        optimal_points.append(cnt[np.argmin(np.linalg.norm(cnt - corners_down, axis=1))])
+    optimal_points = np.asarray(optimal_points).reshape(-1, 2)
     return optimal_points
 
-def get_incircle(mask,cnts):
+
+def get_incircle(mask, cnts):
     """
     The `get_incircle` function calculates the maximum distance from the centroid of a contour to any
     point on the contour and draws a circle with that radius for each contour provided.
@@ -55,14 +58,15 @@ def get_incircle(mask,cnts):
     for cnt in cnts:
         M = cv2.moments(cnt)
         if M['m00'] != 0:
-            cx = int(M['m10']/M['m00'])
-            cy = int(M['m01']/M['m00'])
-            diff = (cnt - [cx,cy]).reshape(-1,2)
+            cx = int(M['m10'] / M['m00'])
+            cy = int(M['m01'] / M['m00'])
+            diff = (cnt - [cx, cy]).reshape(-1, 2)
             # Calculate Euclidean distance between each point in the contour and center1
             distances = np.linalg.norm(diff, axis=1)
             max_dist = min(distances)
-            cv2.circle(mask, (cx, cy), int(max_dist*0.5), (255, 255, 255), -1)
-    return mask.astype(np.uint8), (cx,cy)
+            cv2.circle(mask, (cx, cy), int(max_dist * 0.5), (255, 255, 255), -1)
+    return mask.astype(np.uint8), (cx, cy)
+
 
 def find_furthest_points(cnt):
     """
@@ -81,11 +85,12 @@ def find_furthest_points(cnt):
     max_dist_prev = 0
     max_index = [None, None]
     for i, points in enumerate(cnt):
-        max_dist = np.max(np.linalg.norm(cnt-points,axis=1))
-        if max_dist>max_dist_prev:
-            max_index = [i, np.argmax(np.linalg.norm(cnt-points,axis=1))]
+        max_dist = np.max(np.linalg.norm(cnt - points, axis=1))
+        if max_dist > max_dist_prev:
+            max_index = [i, np.argmax(np.linalg.norm(cnt - points, axis=1))]
         max_dist_prev = max_dist
     return max_index
+
 
 def find_midpoint(point1, point2):
     """
@@ -105,7 +110,8 @@ def find_midpoint(point1, point2):
     """
     point1 = point1.ravel()
     point2 = point2.ravel()
-    return np.array([(point1[0] + point2[0]) / 2, (point1[1] + point2[1]) /2])  
+    return np.array([(point1[0] + point2[0]) / 2, (point1[1] + point2[1]) / 2])
+
 
 def find_y_intercept(mid_point, slope):
     """
@@ -125,9 +131,11 @@ def find_y_intercept(mid_point, slope):
     """
     return mid_point[1] - slope * mid_point[0]
 
+
 def calculate_slope(point1, point2):
     slope = (point2[1] - point1[1]) / (point2[0] - point1[0]) if point2[0] != point1[0] else float('inf')
-    return -1/slope
+    return -1 / slope
+
 
 def distance_to_line(x0, y0, a, b):
     """
@@ -147,7 +155,8 @@ def distance_to_line(x0, y0, a, b):
         The function `distance_to_line` returns the perpendicular distance from the point (x0, y0) to the
     line defined by the equation y = ax + b.
     """
-    return abs(a * x0 - y0 + b) / np.sqrt(a**2 + 1)
+    return abs(a * x0 - y0 + b) / np.sqrt(a ** 2 + 1)
+
 
 def get_leaf_corner(leaf_contour):
     """
@@ -165,17 +174,18 @@ def get_leaf_corner(leaf_contour):
     """
     point1, point2 = leaf_contour[find_furthest_points(leaf_contour)]
     midpoint = find_midpoint(point1, point2)
-    slope = calculate_slope(point1,point2)
-    intercept = find_y_intercept(midpoint.astype(int),slope)
+    slope = calculate_slope(point1, point2)
+    intercept = find_y_intercept(midpoint.astype(int), slope)
     dist_list = np.zeros(leaf_contour.shape[0])
-    for index,p in enumerate(leaf_contour):
-        dist_list[index] = distance_to_line(p[0],p[1],slope, intercept)
+    for index, p in enumerate(leaf_contour):
+        dist_list[index] = distance_to_line(p[0], p[1], slope, intercept)
     result = dist_list
     smallest_index = np.argpartition(abs(result), 5)[:5]
     point3 = leaf_contour[smallest_index[0]]
-    point4_index = np.argmin(np.linalg.norm((leaf_contour[smallest_index]+point3-2*midpoint),axis=1))
+    point4_index = np.argmin(np.linalg.norm((leaf_contour[smallest_index] + point3 - 2 * midpoint), axis=1))
     point4 = leaf_contour[smallest_index[point4_index]]
-    return (point1, point2, point3, point4, midpoint)
+    return point1, point2, point3, point4, midpoint
+
 
 def draw_leaf_corner(corners, mask):
     """
@@ -198,6 +208,7 @@ def draw_leaf_corner(corners, mask):
         cv2.circle(mask1, point.astype(int), 5, (255, 0, 255), -1)  # Red point
     return mask1
 
+
 def get_leaf_center(mask, leaf_index=-1):
     """
     This function extracts the center coordinates of leaf shapes from a given mask image.
@@ -217,18 +228,19 @@ def get_leaf_center(mask, leaf_index=-1):
     """
     contours = get_cnts(mask)
     leaf_centers = []
-    if leaf_index!=-1:
+    if leaf_index != -1:
         cnt = contours[leaf_index]
-        cnt = cnt.reshape(-1,2)
-        leaf_centers.append(get_leaf_corner(cnt)[-1]) 
+        cnt = cnt.reshape(-1, 2)
+        leaf_centers.append(get_leaf_corner(cnt)[-1])
     else:
         for cnt in contours:
             for cnt in contours:
-                cnt = cnt.reshape(-1,2)
+                cnt = cnt.reshape(-1, 2)
                 leaf_center = get_leaf_corner(cnt)[-1]
                 leaf_centers.append(leaf_center)
     return leaf_centers
-    
+
+
 def draw_circle(point, image, size=5):
     """
     The function `draw_circle` takes a point and an image as input, and draws a filled circle of a
@@ -249,6 +261,6 @@ def draw_circle(point, image, size=5):
     The function `draw_circle` returns the image with a circle drawn on it at the specified point with
     the specified size.
     """
-    x,y = point.astype(np.int16)
-    cv2.circle(image, (x,y), int(size), (255, 255, 255), thickness=-1)
+    x, y = point.astype(np.int16)
+    cv2.circle(image, (x, y), int(size), (255, 255, 255), thickness=-1)
     return image

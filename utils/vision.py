@@ -38,8 +38,8 @@ def filter_roi_in_pcd(rgb_img, rgb_pixel, points_3d):
     # # Visualizing the point cloud
     cl, ind = pcd.remove_radius_outlier(nb_points=50, radius=100)
     pcd = cl.select_by_index(ind)
-    cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=50,
-                                            std_ratio=2)
+    cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=100,
+                                            std_ratio=4)
     pcd = cl_final.select_by_index(ind_final)
     return pcd
 
