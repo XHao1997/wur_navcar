@@ -1,31 +1,42 @@
 import copy
-import os
-import sys
-import time
-
-import cv2
 import zmq
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QPixmap, QImage
 from PySide6.QtWidgets import QWidget, QGraphicsScene, QApplication
-
 from ui.LeafBot_ui import Ui_LeafBotForm
-
 from module.AI_model import Yolo, MobileSAM
+from module.msg import ARMTASK, Msg
 from utils import ssh, image_process
-
 import threading
 import time
-import cv2
 
 
+def Singleton(cls):  # This is a function that aims to implement a "decorator" for types.
+    """
+    cls: represents a class name, i.e., the name of the singleton class to be designed.
+         Since in Python everything is an object, class names can also be passed as arguments.
+    """
+    instance = {}
+
+    def singleton(*args, **kargs):
+        if cls not in instance:
+            instance[cls] = cls(*args, **kargs)  # If the class does not exist in the dictionary, create an instance
+            # and save it in the dictionary.
+        return instance[cls]
+
+    return singleton
+
+
+@Singleton
 class Communicator:
     def __init__(self):
         self.context = zmq.Context()
-        self.publisher = self.context.socket(zmq.PUB)
+        self.publisher = self.context.socket(zmq.PAIR)
         self.consumer_receiver = self.context.socket(zmq.PULL)
         self.publisher.bind("tcp://192.168.101.14:5555")
         self.consumer_receiver.connect("tcp://192.168.101.12:5557")
+        self.requester = self.context.socket(zmq.REQ)
+        self.requester.connect("tcp://192.168.101.11:6666")
 
     def get_data(self):
         return self.consumer_receiver.recv_pyobj()
@@ -43,6 +54,7 @@ class ImageThread(threading.Thread):
             frame = self.server.get_data()  # Read image from the camera
             with self.lock:  # Acquire the lock
                 self.latest_image = frame  # Update the latest image
+            time.sleep(0.001)
 
     def get_latest_image(self):
         with self.lock:  # Acquire the lock
@@ -78,6 +90,9 @@ class ClientServer:
     def send_cmd(self, cmd):
         self.server.publisher.send_pyobj(cmd)
 
+    def receive_cmd(self):
+        return self.server.publisher.recv_pyobj()
+
 
 class LeafBot(QWidget, Ui_LeafBotForm):
     def __init__(self):
@@ -111,6 +126,9 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.pushButton_J6.clicked.connect(self.send_cmd_to_J6)
         self.pushButton_detect_leaf.clicked.connect(self.detect_leaf)
         self.pushButton_segment_leaf.clicked.connect(self.segment_leaf)
+        self.pushButton_move_all.clicked.connect(self.send_cmd_to_all_joints)
+        self.pushButton_zero_position.clicked.connect(self.send_cmd_zero_position)
+        self.pushButton_read_servo.clicked.connect(self.send_cmd_to_read_servo)
 
     def showRgb(self):
         image = self.server.rgb_image()
@@ -136,7 +154,7 @@ class LeafBot(QWidget, Ui_LeafBotForm):
 
     def show_mask(self):
         image = self.server.sam_mask()
-        image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        image = image_process.rgb2bgr(image)
         scene = QGraphicsScene(self)
         image = QImage(image, image.shape[1], image.shape[0],
                        image.strides[0], QImage.Format.Format_RGB888)
@@ -159,35 +177,66 @@ class LeafBot(QWidget, Ui_LeafBotForm):
     def send_cmd_to_J1(self):
         print("send_cmd_to_arm called")
         cmd_dict = {self.pushButton_J1.text(): self.spinBox_J1.value()}
-        self.server.send_cmd(cmd_dict)
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
+        self.server.send_cmd(cmd)
 
     def send_cmd_to_J2(self):
         cmd_dict = {self.pushButton_J2.text(): self.spinBox_J2.value()}
-        self.server.send_cmd(cmd_dict)
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
+        self.server.send_cmd(cmd)
 
     def send_cmd_to_J3(self):
         cmd_dict = {self.pushButton_J3.text(): self.spinBox_J3.value()}
-        self.server.send_cmd(cmd_dict)
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
+        self.server.send_cmd(cmd)
 
     def send_cmd_to_J4(self):
         cmd_dict = {self.pushButton_J4.text(): self.spinBox_J4.value()}
-        self.server.send_cmd(cmd_dict)
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
+        self.server.send_cmd(cmd)
 
     def send_cmd_to_J5(self):
         cmd_dict = {self.pushButton_J5.text(): self.spinBox_J5.value()}
-        self.server.send_cmd(cmd_dict)
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
+        self.server.send_cmd(cmd)
 
     def send_cmd_to_J6(self):
         cmd_dict = {self.pushButton_J6.text(): self.spinBox_J6.value()}
-        self.server.send_cmd(cmd_dict)
-
-    def send_cmd_to_car(self, cmd):
-        pass
-
-    def send_cmd_to_all_joints(self, cmd):
-        cmd = [int(self.pushButton_J1.text()), int(self.pushButton_J2.text()), int(self.pushButton_J3.text()),
-               int(self.pushButton_J4.text()), int(self.pushButton_J5.text()), int(self.pushButton_J6.text())]
+        cmd = Msg()
+        cmd.task = ARMTASK.MOVE_SINGLE_JOINT
+        cmd.cmd = cmd_dict
         self.server.send_cmd(cmd)
+
+    def send_cmd_zero_position(self):
+        cmd = Msg(ARMTASK.MOVE_ZERO_POSITION)
+        self.server.send_cmd(cmd)
+
+    def send_cmd_to_all_joints(self):
+        cmd_dict = [int(self.spinBox_J1.value()), int(self.spinBox_J2.value()), int(self.spinBox_J3.value()),
+                    int(self.spinBox_J4.value()), int(self.spinBox_J5.value()), int(self.spinBox_J6.value())]
+        cmd = Msg(ARMTASK.MOVE_ALL_JOINT, cmd_dict)
+        self.server.send_cmd(cmd)
+
+    def send_cmd_to_read_servo(self):
+        cmd = Msg(ARMTASK.READ_SERVO)
+        self.server.send_cmd(cmd)
+        joint_list = self.server.receive_cmd()
+        self.spinBox_J1.setValue(joint_list[0])
+        self.spinBox_J2.setValue(joint_list[1])
+        self.spinBox_J3.setValue(joint_list[2])
+        self.spinBox_J4.setValue(joint_list[3])
+        self.spinBox_J5.setValue(joint_list[4])
+        self.spinBox_J6.setValue(joint_list[5])
 
     def cal_leaf_center(self):
         pass
