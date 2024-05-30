@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
+
 PROJECT_PATH = os.getcwd()
 SOURCE_PATH = os.path.join(
     PROJECT_PATH
@@ -13,19 +14,27 @@ import numpy as np
 from utils import vision
 import open3d as o3d
 
-class Kinect():
+
+def prepocess_depth_img(depth_img):
+    rows, cols = depth_img.shape
+    M = np.float32([[1, 0, 4], [0, 1, 3]])
+    depth_img = cv2.warpAffine(depth_img, M, (cols, rows))
+    return depth_img
+
+
+class Kinect:
     def __init__(self):
         # Defining the intrinsic and distortion matrices for the IR and RGB cameras,as 
         # well as other related parameters and matrices used in the camera calibration 
         # and image processing tasks.
         self.__ir_intrinsic_matrix = np.array(
             [[580.938217500424, 0, 317.617632886121],
-            [0, 579.637279926675, 246.729727555759], [0, 0, 1]])
+             [0, 579.637279926675, 246.729727555759], [0, 0, 1]])
         self.__ir_distortion_matrix = np.array(
             [-0.203726937212412, 0.888177301091217, 0.002407122300079, -0.005097629434545, 0])
         self.__rgb_intrinsic_matrix = np.array(
             [[516.807042827898, 0, 334.465952581250],
-            [0, 515.754575693376, 256.996105088827], [0, 0, 1]])
+             [0, 515.754575693376, 256.996105088827], [0, 0, 1]])
         self.__rgb_distortion_matrix = np.array(
             [0.205630360349696, -0.666613712966367, 0.007397174890620, -0.003644398316505, 0])
 
@@ -46,15 +55,9 @@ class Kinect():
         self.__imgsz = [640, 480]
 
         return
-    
+
     # ir to depth offset, reference: https://wiki.ros.org/kinect_calibration/technical
-    def prepocess_depth_img(self, depth_img):
-        rows, cols = depth_img.shape
-        M = np.float32([[1, 0, 4], [0, 1,3]])
-        depth_img = cv2.warpAffine(depth_img, M, (cols, rows))
-        return depth_img
-    
-        
+
     def map_dist_to_rgb(self, dist_img):
         E = self.__A
         K = self.__new_rgb_intrinsic_matrix
@@ -71,14 +74,14 @@ class Kinect():
         raw_pixel = T_d2rgb.dot(points_3d.T).T
         rgb_pixel = np.round((raw_pixel / (raw_pixel[:, -1]).reshape(-1, 1))).astype(int)
         return rgb_pixel
-    
+
     def get_distance(self, depth_img):
         # dist = 0.1236 * np.tan((depth_img) / 2842.5 + 1.1863) * 1000-37
-        dist = 0.075 * 580 / (1090 - depth_img) * 8*1000
+        dist = 0.075 * 580 / (1090 - depth_img) * 8 * 1000
         dist[dist < 500] = 0
-        dist[dist >2000] = 0
+        dist[dist > 2000] = 0
         return dist
-    
+
     def pixel_to_world(self, dist_img):
         x = np.tile(np.arange(640), (480, 1))
         y = np.tile(np.arange(480).reshape(-1, 1), (1, 640))
@@ -90,7 +93,7 @@ class Kinect():
         X = (x - cx) * (Z) / fx
         Y = (y - cy) * (Z) / fy
         return X, Y, Z
-    
+
     def undistort(
             self, distorted_img, camera_type):
         # Correcting the distortion
@@ -111,7 +114,6 @@ class Kinect():
                 self.__ir_distortion_matrix, None,
                 self.__new_ir_intrinsic_matrix)  # Correcting the distortion
         return undistorted_img
-    
 
     def get_centroid_coordindate(self, pcd):
         # Assigning the points
@@ -120,14 +122,14 @@ class Kinect():
         del points_array
         return centroid_coordindate
 
-    def get_point_xyz(self, roi_mask,rgb_img, depth_img):
+    def get_point_xyz(self, roi_mask, rgb_img, depth_img):
         print('convert xyz')
         # ir to depth offset, reference: https://wiki.ros.org/kinect_calibration/technical
-        depth_img_post = self.prepocess_depth_img(depth_img)
-        roi_img = cv2.bitwise_and(rgb_img,rgb_img,mask=roi_mask)
+        depth_img_post = prepocess_depth_img(depth_img)
+        roi_img = cv2.bitwise_and(rgb_img, rgb_img, mask=roi_mask)
         # undistort rgb and depth image to get new camera matrix
         roi_img = self.undistort(roi_img, 'rgb')
-        _ = self.undistort(depth_img_post,'ir')
+        _ = self.undistort(depth_img_post, 'ir')
         # convert disparity to distance
         dist_img = self.get_distance(depth_img_post)
         # from distance and ir_intrinsic calculate xyz in camera's world frame

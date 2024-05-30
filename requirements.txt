@@ -19,3 +19,4 @@ paramiko~=2.8.1
 numpy~=1.26.4
 pyside6~=6.7.0
 qimage2ndarray~=1.10.0
+requests~=2.31.0

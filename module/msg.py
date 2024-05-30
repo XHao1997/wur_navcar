@@ -10,6 +10,7 @@ class ARMTASK(Enum):
     MOVE_JOINT1_NN = 6
     MOVE_ZERO_POSITION = 7
     READ_SERVO = 8
+    PICK_CLOSEST_LEAF = 9
 
 class Msg:
     def __init__(self, *args):

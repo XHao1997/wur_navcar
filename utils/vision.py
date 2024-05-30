@@ -27,20 +27,21 @@ def filter_roi_in_pcd(rgb_img, rgb_pixel, points_3d):
                 points_3d_color.append(pc)
     points_3d = np.asarray(points_3d)
     roi_3d = points_3d[roi_index]
-    roi_index.clear()
-
-    points_3d_color_filtered = np.asarray(points_3d_color)
-    points_3d_color.clear()
     pcd = o3d.geometry.PointCloud()
-    # Assigning the colors
-    pcd.colors = o3d.utility.Vector3dVector(points_3d_color_filtered[:, [2, 1, 0]] / 255.0)
-    pcd.points = o3d.utility.Vector3dVector(roi_3d[:, :3])
+    if len(points_3d_color) != 0:
+        points_3d_color_filtered = np.asarray(points_3d_color)
+        # Assigning the colors
+        pcd.colors = o3d.utility.Vector3dVector(points_3d_color_filtered[:, [2, 1, 0]] / 255.0)
+        pcd.points = o3d.utility.Vector3dVector(roi_3d[:, :3])
     # # Visualizing the point cloud
-    cl, ind = pcd.remove_radius_outlier(nb_points=50, radius=100)
-    pcd = cl.select_by_index(ind)
-    cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=100,
-                                            std_ratio=4)
-    pcd = cl_final.select_by_index(ind_final)
+    if pcd is not None:
+        cl, ind = pcd.remove_radius_outlier(nb_points=20, radius=50)
+        if ind is not None:
+            pcd = cl.select_by_index(ind)
+            cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=50,
+                                                                 std_ratio=10)
+            if cl_final is not None:
+                pcd = cl_final.select_by_index(ind_final)
     return pcd
 
 

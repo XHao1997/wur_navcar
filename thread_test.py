@@ -4,13 +4,17 @@ from module.AI_model import Yolo, MobileSAM
 import time
 from utils import ssh, image_process
 import os
+
 PROJECT_PATH = os.getcwd()
 print(PROJECT_PATH)
 SOURCE_PATH = os.path.join(
     PROJECT_PATH
 )
 import os
-os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+
 class Communicator(object):
     def __init__(self):
         self.context = zmq.Context()
@@ -48,7 +52,6 @@ class Communicator(object):
     def launch():
         ssh.run_remote_stream()
         print('cam_server started')
-
 
 
 if __name__ == '__main__':

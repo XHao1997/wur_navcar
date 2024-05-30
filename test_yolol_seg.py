@@ -25,7 +25,7 @@ directories = {
 depth_image = cv2.imread('depth_81.png',cv2.IMREAD_UNCHANGED)
 
 rgb_img = cv2.imread('rgb_81.png').astype(np.uint8)
-image_yolo = PIL.Image.fromarray(rgb_img)
+image_yolo = rgb_img
 yolo = Yolo()
 sam = MobileSAM()
 

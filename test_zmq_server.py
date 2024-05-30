@@ -3,21 +3,32 @@
 #   Binds REP socket to tcp://*:5555
 #   Expects b"Hello" from client, replies with b"World"
 #
-
+import copy
 import time
+
 import zmq
+import threading
+from utils import ssh
 
-context = zmq.Context()
-socket = context.socket(zmq.REP)
-socket.bind("tcp://*:8888")
 
-while True:
-    #  Wait for next request from client
-    message = socket.recv()
-    print("Received request: %s" % message)
+class Communicator:
+    def __init__(self):
+        self.context = zmq.Context()
+        self.pair_arm = self.context.socket(zmq.REQ)
+        self.pair_arm.bind("tcp://192.168.101.14:5556")
 
-    #  Do some 'work'
-    time.sleep(1)
+    def get_data_from_robot(self):
+        return self.pair_arm.recv()
 
-    #  Send reply back to client
-    socket.send(b"World")
+
+if __name__ == '__main__':
+    context = zmq.Context()
+    pair_arm = context.socket(zmq.REQ)
+    pair_arm.bind("tcp://192.168.101.14:3333")
+    ssh.run_remote_stream()
+    print('done')
+    while True:
+        pair_arm.send_pyobj('hi')
+        msg = pair_arm.recv_pyobj()
+        print(msg)
+

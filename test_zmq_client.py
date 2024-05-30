@@ -10,9 +10,7 @@ class LocalClient(object):
     def __init__(self):
         self.context = zmq.Context()
         self.publisher = self.context.socket(zmq.PUB)
-        self.consumer_receiver = self.context.socket(zmq.PULL)
-        self.publisher.bind("tcp://192.168.101.14:5555")
-        self.consumer_receiver.connect("tcp://192.168.101.12:5557")
+        self.publisher.bind("tcp://192.168.101.19:5555")
         self.luanch()
     def luanch(self):
         ssh.run_remote_stream()
@@ -43,5 +41,5 @@ class LocalClient(object):
         pass
 
 #
-# client_server = LocalClient()
-# client_server.luanch()
+client_server = LocalClient()
+client_server.publisher.send_json({"T":0.1,"L":0.5,"R":0.5})
