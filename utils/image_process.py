@@ -48,14 +48,14 @@ def draw_yolo_frame_cv(image, yolo_results):
         x0, y0, x1, y1 = convert_to_xyxy(result)
         start_point = (int(x0), int(y0))
         end_point = (int(x1), int(y1))
-        cv2.rectangle(image, start_point, end_point, color=(255, 0, 50), thickness=2)
+        cv2.rectangle(image, start_point, end_point, color=(255, 0, 0), thickness=2)
         cv2.putText(
             image,
             result.name + str(i),
             (int(x0), int(y0) - 10),
             fontFace=cv2.FONT_HERSHEY_SIMPLEX,
             fontScale=0.6,
-            color=(255, 0, 255),
+            color=(255, 30, 255),
             thickness=2
         )
 

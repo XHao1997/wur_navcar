@@ -38,7 +38,7 @@ class Yolo():
                 "CPUExecutionProvider",
             ],
         )
-        predictor = Detector(session, PillowToTensorContainStrategy())
+        predictor = Detector(session, PillowToTensorContainStrategy(), conf_threshold=0.5)
         self.model = predictor.run
 
     def predict(self, image: np.ndarray) -> (list, np.array):

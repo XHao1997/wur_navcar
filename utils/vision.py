@@ -34,14 +34,14 @@ def filter_roi_in_pcd(rgb_img, rgb_pixel, points_3d):
         pcd.colors = o3d.utility.Vector3dVector(points_3d_color_filtered[:, [2, 1, 0]] / 255.0)
         pcd.points = o3d.utility.Vector3dVector(roi_3d[:, :3])
     # # Visualizing the point cloud
-    if pcd is not None:
-        cl, ind = pcd.remove_radius_outlier(nb_points=20, radius=50)
-        if ind is not None:
-            pcd = cl.select_by_index(ind)
-            cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=50,
-                                                                 std_ratio=10)
-            if cl_final is not None:
-                pcd = cl_final.select_by_index(ind_final)
+        if pcd.points is not None:
+            cl, ind = pcd.remove_radius_outlier(nb_points=50, radius=200)
+            if not ind:
+                pcd = cl.select_by_index(ind)
+                cl_final, ind_final = pcd.remove_statistical_outlier(nb_neighbors=50,
+                                                                     std_ratio=20)
+                if not ind_final:
+                    pcd = cl_final.select_by_index(ind_final)
     return pcd
 
 

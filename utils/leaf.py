@@ -55,6 +55,7 @@ def get_incircle(mask, cnts):
     the loop.
     """
     mask = np.zeros_like(mask).astype(np.uint8)
+    # cx, cy = (None, None)
     for cnt in cnts:
         M = cv2.moments(cnt)
         if M['m00'] != 0:
@@ -64,7 +65,7 @@ def get_incircle(mask, cnts):
             # Calculate Euclidean distance between each point in the contour and center1
             distances = np.linalg.norm(diff, axis=1)
             max_dist = min(distances)
-            cv2.circle(mask, (cx, cy), int(max_dist * 0.5), (255, 255, 255), -1)
+            cv2.circle(mask, (cx, cy), int(max_dist * 1), (255, 255, 255), -1)
     return mask.astype(np.uint8), (cx, cy)
 
 
@@ -107,6 +108,8 @@ def find_midpoint(point1, point2):
     Returns:
         The function `find_midpoint` takes two points as input, flattens them using `ravel()`, calculates
     the midpoint between the two points, and returns the coordinates of the midpoint as a NumPy array.
+    :param point1:
+    :param point2:
     """
     point1 = point1.ravel()
     point2 = point2.ravel()

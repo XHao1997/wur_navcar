@@ -11,6 +11,11 @@ class ARMTASK(Enum):
     MOVE_ZERO_POSITION = 7
     READ_SERVO = 8
     PICK_CLOSEST_LEAF = 9
+    TRAIN_EYE2HAND = 10
+    DONE = 0
+    SET_TORQUE = 11
+    OFF_TORQUE = 12
+    IMITATION_MOVE = 13
 
 class Msg:
     def __init__(self, *args):
@@ -25,4 +30,3 @@ class Msg:
             self.cmd = None
 
 
-msg = Msg()
