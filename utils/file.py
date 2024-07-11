@@ -22,7 +22,7 @@ def find_file_maxnum(directory):
 
 def set_file_name(directories, key):
     max_num = find_file_maxnum(directories[key])
-    if key != 'rgb' or key != 'depth':
+    if key != 'rgb' and key != 'depth':
         filename = f"{key}_{max_num + 1:02d}"
     else:
         filename = f"{key}_{max_num + 1:02d}.png"

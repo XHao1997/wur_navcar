@@ -19,19 +19,6 @@ import queue
 import sys
 
 
-def recv_array(socket, flags=0, copy=True, track=False):
-    """Receive a numpy array over a ZeroMQ socket."""
-
-    # Receive the actual data
-    msg = socket.recv(flags=flags, copy=copy, track=track)
-
-    # Convert received bytes to a NumPy array
-    A = np.frombuffer(msg, dtype=np.uint8)
-
-    # Reshape array to its original shape
-    return A.reshape(480, 640, 3)
-
-
 def Singleton(cls):  # This is a function that aims to implement a "decorator" for types.
     """
     cls: represents a class name, i.e., the name of the singleton class to be designed.
@@ -51,14 +38,22 @@ def Singleton(cls):  # This is a function that aims to implement a "decorator" f
 @Singleton
 class Communicator:
     def __init__(self):
-        self.context = zmq.Context()
+        self.context = zmq.Context.instance()
         self.pair_cam = self.context.socket(zmq.SUB)
+        # self.car_cam = self.context.socket(zmq.SUB)
         self.depth_req = self.context.socket(zmq.REQ)
 
         self.pair_cam.linger = 1
         self.pair_cam.setsockopt(zmq.SUBSCRIBE, b'')
         self.pair_cam.setsockopt(zmq.CONFLATE, 1)  # last msg only.
         self.pair_cam.setsockopt(zmq.RCVHWM, 1)
+
+        # self.car_cam.linger = 1
+        # self.car_cam.setsockopt(zmq.SUBSCRIBE, b'')
+        # self.car_cam.setsockopt(zmq.CONFLATE, 1)  # last msg only.
+        # self.car_cam.setsockopt(zmq.RCVHWM, 1)
+        # self.car_cam.connect("tcp://192.168.101.12:7777")
+
         self.pair_cam.connect("tcp://192.168.101.12:5555")
 
         self.depth_req.connect("tcp://192.168.101.12:5556")
@@ -69,11 +64,16 @@ class Communicator:
         self.url = "http://" + car_ip_addr + "/js?json="
 
     def get_data(self):
-        return recv_array(self.pair_cam)
+        return self.pair_cam.recv_pyobj()
 
     def get_data_depth(self):
         self.depth_req.send_pyobj(None)
         return self.depth_req.recv_pyobj()
+
+    def get_car_rgb(self):
+        car_img = self.car_cam.recv_pyobj()
+        print(car_img.shape)
+        return car_img
 
     def send_cmd_arm(self, cmd):
         self.pair_arm.send_pyobj(cmd)
@@ -122,8 +122,8 @@ class ImagePostProcess:
 
 
 directories = {
-    'rgb': 'data/rgb',
-    'depth': 'data/depth',
+    'rgb': 'data/rgb/',
+    'depth': 'data/depth/',
     'eye_to_hand': 'eye_to_hand/',
     'joint1_nn': 'joint1_nn/',
     'imitation_car': 'data/imitation_car/'
@@ -186,7 +186,6 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.pushButton_off_torque.clicked.connect(self.send_cmd_to_off_torque)
         self.pushButton_record_joint.clicked.connect(self.send_cmd_imitation_pose)
 
-
         # Create a QAction with a keyboard shortcut (in this case, Ctrl+B)
         action_up = QAction(self)
         action_up.setShortcut(Qt.Key.Key_Up)
@@ -200,6 +199,9 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         action_right = QAction(self)
         action_right.setShortcut(Qt.Key.Key_Right)
         action_right.triggered.connect(self.pushButton_car_turn_right.click)
+        action_stop = QAction(self)
+        action_stop.setShortcut(Qt.Key.Key_2)
+        action_stop.triggered.connect(self.pushButton_car_stop.click)
         # 添加QAction对象到主窗口
         self.addAction(action_up)
         self.addAction(action_down)
@@ -213,7 +215,7 @@ class LeafBot(QWidget, Ui_LeafBotForm):
 
         self.show_rgb_thread = UpdateUI()
         self.show_rgb_thread.update_signal.connect(self.__showRgb)
-        # self.show_rgb_thread.start()
+        self.show_rgb_thread.start()
 
         self.show_yolo_thread = UpdateUI()
         self.show_yolo_thread.update_signal.connect(self.__show_bbox)
@@ -229,8 +231,8 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.show_rgb_thread.start()
         self.car_cmd_thread.start()
 
-    def update_img(self, img):
-        self.rgb_img = img
+    def update_img(self, data):
+        self.rgb_img = data
 
     def set_imitation_mode(self):
         self.imitation_mode = self.checkBox_Imitation.isChecked()
@@ -247,8 +249,11 @@ class LeafBot(QWidget, Ui_LeafBotForm):
             self.label_showimg.repaint()
 
     def __showRgb(self):
-        image = self.rgb_img.copy()
+        image = self.rgb_img
         self.__paint_img(image)
+
+    def __showCar(self, image):
+        self.__paint_car_img(image)
 
     def __show_bbox(self):
         yolo_img = self.server.yolo_image(self.rgb_img)
@@ -386,11 +391,12 @@ class LeafBot(QWidget, Ui_LeafBotForm):
 
     def record_imitation_done(self):
         pass
+
     """ The slot function for controlling the Car """
 
     def send_cmd_to_move_forward(self):
-        L_speed = -0.1 * int(self.comboBox_car_speed.currentText())
-        R_speed = -0.1 * int(self.comboBox_car_speed.currentText())
+        L_speed = 0.02 * int(self.comboBox_car_speed.currentText())
+        R_speed = 0.02 * int(self.comboBox_car_speed.currentText())
         cmd = {"T": 1, "L": L_speed, "R": R_speed}
         if self.imitation_mode:
             self.save_imitation([self.rgb_img, 1])
@@ -398,26 +404,22 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         # self.com.receive_imu()
 
     def send_cmd_to_move_backward(self):
-        L_speed = 0.1 * int(self.comboBox_car_speed.currentText())
-        R_speed = 0.1 * int(self.comboBox_car_speed.currentText())
+        L_speed = -0.02 * int(self.comboBox_car_speed.currentText())
+        R_speed = -0.02 * int(self.comboBox_car_speed.currentText())
         if self.imitation_mode:
             self.save_imitation([self.rgb_img, -1])
         cmd = {"T": 1, "L": L_speed, "R": R_speed}
         self.com.send_json(str(cmd))
-        # self.com.receive_imu()
 
     def send_cmd_to_turn_left(self):
-        L_speed = 0.2 * int(self.comboBox_car_speed.currentText())
-        R_speed = -0.01 * int(self.comboBox_car_speed.currentText())
-
+        L_speed = -0.05 * int(self.comboBox_car_speed.currentText())
+        R_speed = 0.05 * int(self.comboBox_car_speed.currentText())
         cmd = {"T": 1, "L": L_speed, "R": R_speed}
         self.com.send_json(str(cmd))
-        # self.com.receive_imu()
 
     def send_cmd_to_turn_right(self):
-        L_speed = -0.01 * int(self.comboBox_car_speed.currentText())
-        R_speed = 0.2 * int(self.comboBox_car_speed.currentText())
-
+        L_speed = 0.05 * int(self.comboBox_car_speed.currentText())
+        R_speed = -0.05 * int(self.comboBox_car_speed.currentText())
         cmd = {"T": 1, "L": L_speed, "R": R_speed}
         self.com.send_json(str(cmd))
 
@@ -458,8 +460,8 @@ class UpdateData(QThread):
     def run(self):
         self.timer = QTimer()
         self.timer.timeout.connect(self.emitUpdateSignal)
+        self.timer.start(100)  # Trigger 10FPS
         self.timer.moveToThread(self)
-        self.timer.start(125)  # Trigger 10FPS
         self.exec()  # Start the event loop to keep the QTimer running
 
     def emitUpdateSignal(self):
@@ -482,7 +484,7 @@ class UpdateUI(QThread):
         timer = QTimer()
         timer.moveToThread(self)
         timer.timeout.connect(self.emitUpdateSignal)
-        timer.start(200)  # Trigger 8FPS
+        timer.start(125)  # Trigger 8FPS
         # Start the event loop to keep the QTimer running
         self.exec()
 
@@ -517,7 +519,6 @@ class SavaImage(QThread):
         self.finished.emit()
         self.quit()
         self.wait()
-
 
 
 class CMD(QThread):
