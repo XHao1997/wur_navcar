@@ -7,13 +7,7 @@ SOURCE_PATH = os.path.join(
     PROJECT_PATH
 )
 sys.path.append(SOURCE_PATH)
-import matplotlib.pyplot as plt
 
-from module.cam_server import CamServer
-from module.camera import Camera
-import threading
-from utils import image_process, file
-import time    
 # import gc
 # gc.set_threshold(100*1024*1024)
 # image = image_process.draw_yolo_frame_cv(image,yolo_result)

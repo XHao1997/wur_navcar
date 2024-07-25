@@ -113,7 +113,7 @@ while True:
         if data == 'capture':
             for i in range(5):    
                 print(i)
-                rgb_img, depth_img= kinect.capture()
+                rgb_img, depth_img= kinect.__capture()
                 yolo_results = yolo.predict(rgb_img)
                 sam_results = mobile_sam.predict(rgb_img,yolo_results)
                 mask = np.zeros_like(sam_results)

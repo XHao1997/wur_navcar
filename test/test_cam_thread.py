@@ -13,18 +13,25 @@ import queue
 from threading import Thread
 from module.camera import Camera
 from utils import image_process
+from utils.file import save_file
+
 ""
 
 # 对于图像的处理方法
 
+# Directory where files are saved
+directories = {
+    'rgb': 'rgb_cali/',
+    'depth': 'depth_cali',
+    'eye_to_hand': 'eye_to_hand/',
+    'joint1_nn': 'joint1_nn/'
+}
+
         
 if __name__ == "__main__":
     # 启动 获取摄像头画面的 线程
-    frame_queue = queue.LifoQueue()
-    kinect = Camera(frame_queue)
-    kinect.run()
-    # 启动处理（显示）摄像头画面的线程
-    thread_show = Thread(target=image_process.show_frame, args=(frame_queue,))
-    thread_show.start()
-    thread_show.join()
-    kinect.stop()
+    cap = Camera()
+    rgb_img, depth_img = cap.__capture()
+    
+    cv2.imwrite('test.jpg', rgb_img)
+    save_file(directories, rgb_img, 'rgb')

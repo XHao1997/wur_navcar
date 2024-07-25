@@ -22,7 +22,7 @@ if __name__ == "__main__":
 
 
     while True:
-        async_result,async_result2 = kinect.capture()
+        async_result,async_result2 = kinect.__capture()
         cv2.imshow('Depth', async_result2.get())
         cv2.imshow('Video', async_result.get())
         ch = cv2.waitKey(25)
