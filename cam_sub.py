@@ -15,6 +15,7 @@ print(sys.path)
 import time
 import zmq
 from module.camera import Camera
+from utils.sensor import sensor_detect
 import threading
 import time
 
@@ -27,6 +28,7 @@ print('camera loaded')
 class producer:
     def __init__(self):
         context = zmq.Context()
+        sensor_detect()
         self.zmq_socket_rgb = context.socket(zmq.PUB)
         self.zmq_socket_rgb.setsockopt(zmq.SNDHWM, 1)  
         self.zmq_socket_rgb.setsockopt(zmq.CONFLATE, 1)  # last msg only.
@@ -45,8 +47,12 @@ class producer:
     def send_all(self):
         while True:
             self.zmq_socket_d.recv_pyobj()
-            depth_img= cap.get_depth_images()
-            self.zmq_socket_d.send_pyobj(depth_img)
+            if self.zmq_socket_d.recv_pyobj()=='detect':
+                sensor_detect()
+                self.zmq_socket_d.send_pyobj(1)
+            else:
+                depth_img= cap.get_depth_images()
+                self.zmq_socket_d.send_pyobj(depth_img)
             time.sleep(1)
 
 cam = producer()
