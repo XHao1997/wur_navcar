@@ -30,6 +30,11 @@ def set_file_name(directories, key):
     return filename
 
 
+def save_joint_cmd(cmd):
+    with open('data/cali/j1/cali_j1.txt', 'a') as f:
+        np.savetxt(f, np.array([int(cmd)]), newline='\n')
+
+
 def save_file(directories, file, key):
     filename = set_file_name(directories, key)
     if key == 'rgb':
@@ -39,7 +44,7 @@ def save_file(directories, file, key):
     elif key == 'seg':
         cv2.imwrite(os.path.join(directories[key], filename), file)
     elif key == 'eye_to_hand':
-        filename = np.save(os.path.join(directories[key], filename), file)
+        cv2.imwrite(os.path.join(directories[key], filename), file)
     elif key == 'joint1_nn':
         filename = np.save(os.path.join(directories[key], filename), file)
     elif key == 'imitation_car':

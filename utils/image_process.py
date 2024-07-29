@@ -29,17 +29,37 @@ def convert_to_xyxy(result):
 
 
 def get_yolo_roi(image, yolo_result):
-    mask = np.zeros((480, 640)).astype(np.uint8)
     x0, y0, x1, y1 = convert_to_xyxy(yolo_result)
     x0 = x0 - 2
     y0 = y0 - 2
     x1 = x1 + 2
     y1 = y1 + 2
-    # Create a mask for the YOLO bounding box
-    mask = cv2.rectangle(mask, (x0, y0,), (x1, y1), (255, 255, 255), -1)
+    mask = bbox2mask(x0, x1, y0, y1)
     # Apply the mask to the grayscale image
     result = cv2.bitwise_and(image, image, mask=mask)
     return result
+
+
+def convert_bbox_pct(bbox):
+    x0, y0, x1, y1 = bbox
+    src_pts = np.array([[x0, y0], [x0, y1], [x1, y1], [x1, y0]])
+    return src_pts.reshape(-1, 1, 2)
+
+
+def get_xyxy_from_pct(pct):
+    pct = pct.reshape(-1, 2)
+    x0 = np.min(pct[:, 0])-5
+    x1 = np.max(pct[:, 0])-5
+    y0 = np.min(pct[:, 1])+5
+    y1 = np.max(pct[:, 1])+5
+    return x0, y0, x1, y1
+
+
+def bbox2mask(x0, x1, y0, y1):
+    mask = np.zeros((480, 640)).astype(np.uint8)
+    # Create a mask for the YOLO bounding box
+    mask = cv2.rectangle(mask, (x0, y0,), (x1, y1), (255, 255, 255), -1)
+    return mask
 
 
 def draw_yolo_frame_cv(image, yolo_results):
@@ -63,7 +83,7 @@ def draw_yolo_frame_cv(image, yolo_results):
 
 
 # Define a function to draw rectangles on the image
-def draw_yolo_fram_plt(ax, result, leaf_index, color='r'):
+def draw_yolo_frame_plt(ax, result, leaf_index, color='r'):
     rect = patches.Rectangle((result.x, result.y), result.width, result.height, linewidth=2, edgecolor=color,
                              facecolor='none')
     ax.add_patch(rect)
@@ -135,7 +155,7 @@ def plot_yolo_result(image: np.ndarray, results: np.ndarray) -> None:
     # Display the image
     ax.imshow(image)
     for i, detection in enumerate(results):
-        draw_yolo_fram_plt(ax, detection, i + 1)
+        draw_yolo_frame_plt(ax, detection, i + 1)
     # Show the plot
     plt.show()
 

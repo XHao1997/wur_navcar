@@ -11,7 +11,7 @@ sys.path.append(SOURCE_PATH)
 import time
 import cv2
 import numpy as np
-from utils import vision
+from utils import vision, cali
 import open3d as o3d
 
 
@@ -79,7 +79,7 @@ class Kinect:
         # dist = 0.1236 * np.tan((depth_img) / 2842.5 + 1.1863) * 1000-37
         dist = 0.075 * 580 / (1090 - depth_img) * 8 * 1000
         dist[dist < 500] = 0
-        dist[dist > 1200] = 0
+        dist[dist > 1500] = 0
         return dist
 
     def pixel_to_world(self, dist_img):
@@ -119,13 +119,13 @@ class Kinect:
         # Assigning the points
         points_array = np.asarray(pcd.points)
         centroid_coordindate = np.median(points_array, axis=0)
-        del points_array
         return centroid_coordindate
 
-    def get_point_xyz(self, roi_mask, rgb_img, depth_img):
-        print('convert xyz')
+    def get_point_xyz(self, roi_mask, rgb_img, depth_img, mask_yolo_exp):
         # ir to depth offset, reference: https://wiki.ros.org/kinect_calibration/technical
         depth_img_post = prepocess_depth_img(depth_img)
+        depth_img_post = cv2.bitwise_and(depth_img_post, depth_img_post, mask=mask_yolo_exp)
+
         roi_img = cv2.bitwise_and(rgb_img, rgb_img, mask=roi_mask)
         # undistort rgb and depth image to get new camera matrix
         roi_img = self.undistort(roi_img, 'rgb')
@@ -135,12 +135,9 @@ class Kinect:
         # from distance and ir_intrinsic calculate xyz in camera's world frame
         x, y, z = self.pixel_to_world(dist_img)
         points_3d = vision.create_point3d_from_xyz(x, y, z)
-        print('create_point3d_from_xyz')
         rgb_pixel = self.map_dist_to_rgb(dist_img)
-        print('map_dist_to_rgb')
         leaf_pcd = vision.filter_roi_in_pcd(roi_img, rgb_pixel, points_3d)
-        print('filter_roi_in_pcd')
+        # o3d.visualization.draw_geometries([leaf_pcd])
         self.get_centroid_coordindate(leaf_pcd)
         xyz = (self.get_centroid_coordindate(leaf_pcd))
-        print('convert xyz DONE')
         return xyz

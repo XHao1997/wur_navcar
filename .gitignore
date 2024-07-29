@@ -1,4 +1,7 @@
 *png
 remote_car/
 **/*cali*/
+**/__pycache__
+
+
 

@@ -120,8 +120,8 @@ class Camera():
     def get_distance(self, depth_img):
         # dist = 0.1236 * np.tan((depth_img) / 2842.5 + 1.1863) * 1000-37
         dist = 0.075 * 580 / (1090 - depth_img) * 8*1000
-        dist[dist < 500] = 0
-        dist[dist >1200] = 0
+        dist[dist < 600] = 0
+        dist[dist >2000] = 0
         return dist
     
     def pixel_to_world(self, dist_img):

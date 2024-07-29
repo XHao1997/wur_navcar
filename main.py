@@ -1,22 +1,30 @@
 import copy
 import threading
 from typing import Any
-
+import torch.nn.functional as F
 import cv2
 import numpy as np
 import zmq
-from PySide6.QtCore import QTimer, Qt, QThread, Signal, Slot, QObject
+from PySide6.QtCore import QTimer, Qt, QThread, Signal, Slot, QObject, QMutex
 from PySide6.QtGui import QPixmap, QImage, QAction
 from PySide6.QtWidgets import QWidget, QGraphicsScene, QApplication
+from matplotlib import pyplot as plt
+
 from ui.LeafBot_ui import Ui_LeafBotForm
 from module.AI_model import Yolo, MobileSAM
 from module.msg import ARMTASK, Msg
-from utils import ssh, image_process, leaf, file
+from utils import ssh, image_process, leaf, file, cali
 from module.kinect import Kinect
 import requests
 import time
-import queue
+import joblib
 import sys
+import sklearn
+import torch
+import torch.nn as nn
+from ultralytics import YOLOv10
+from module import MLPModel
+from utils.cali import pca_pick_angle, expand_mask_roi
 
 
 def Singleton(cls):  # This is a function that aims to implement a "decorator" for types.
@@ -47,12 +55,6 @@ class Communicator:
         self.pair_cam.setsockopt(zmq.SUBSCRIBE, b'')
         self.pair_cam.setsockopt(zmq.CONFLATE, 1)  # last msg only.
         self.pair_cam.setsockopt(zmq.RCVHWM, 1)
-
-        # self.car_cam.linger = 1
-        # self.car_cam.setsockopt(zmq.SUBSCRIBE, b'')
-        # self.car_cam.setsockopt(zmq.CONFLATE, 1)  # last msg only.
-        # self.car_cam.setsockopt(zmq.RCVHWM, 1)
-        # self.car_cam.connect("tcp://192.168.101.12:7777")
 
         self.pair_cam.connect("tcp://192.168.101.12:5555")
 
@@ -90,6 +92,7 @@ class Communicator:
         print(requests.get(cmd).text)
 
 
+@Singleton
 class ImagePostProcess:
     def __init__(self):
         self.yolo = Yolo()
@@ -110,22 +113,33 @@ class ImagePostProcess:
         yolo_results = self.yolo.predict(rgb_img)
         sam_mask = self.sam.predict(rgb_img, yolo_results)
         picking_point = []
+        M = np.load('weights/pnp.npy')
         for i in range(len(yolo_results)):
             result = yolo_results[i]
             chosen_leaf_roi = image_process.get_yolo_roi(sam_mask, result)
             contours = leaf.get_cnts(chosen_leaf_roi)
             mask, _ = leaf.get_incircle(chosen_leaf_roi, contours)
-            picking_point.append(self.camera.get_point_xyz(mask, rgb_img, depth_img))
-        picking_point = np.array(picking_point)
+            bbox = cali.convert_to_xyxy(result)
+            pts = image_process.convert_bbox_pct(bbox)
+            pts_pnp = cv2.transform(pts, M)
+            bbox_pnp = image_process.get_xyxy_from_pct(pts_pnp)
+            mask_pnp = cali.create_mask_from_bbox((480, 640), np.array([bbox_pnp]))
+            mask_yolo_exp = expand_mask_roi(mask_pnp, scale_factor=2)
+            # finished here
+            # depth_img = cv2.bitwise_and(depth_img, depth_img, mask=mask_yolo_exp)
+            picking_point.append(self.camera.get_point_xyz(mask, rgb_img, depth_img, mask_yolo_exp))
+        picking_point = np.array(picking_point).reshape(-1, 3)
         picking_point = picking_point[np.isfinite(picking_point)].reshape(-1, 3)
-        return picking_point
+        print(picking_point)
+
+        return picking_point, yolo_results
 
 
 directories = {
     'rgb': 'data/rgb/',
     'depth': 'data/depth/',
     'eye_to_hand': 'eye_to_hand/',
-    'joint1_nn': 'joint1_nn/',
+    'joint1_nn': 'data/cali/j1',
     'imitation_car': 'data/imitation_car/'
 }
 
@@ -139,10 +153,20 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         super().__init__()
 
         # Directory where files are saved
+
+        self.encoder = joblib.load('weights/encoder.joblib')
         self.is_update_yolo = True
         self.sam_img = None
         self.yolo_img = None
         self.rgb_img = None
+        self.predictor = joblib.load('weights/svm_j1.pkl')
+        self.model_gripper = YOLOv10('weights/best_gripperv2.pt')
+        # Model class must be defined somewhere
+        PATH = 'weights/mlp.pth'
+        self.cali_model = MLPModel.Model()
+        self.cali_model.load(PATH)
+        # Ensure the loaded model is in evaluation mode
+        self.cali_model.eval()
         """ The slot function for Vision """
 
         """ set up server """
@@ -172,7 +196,8 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.pushButton_move_forward.clicked.connect(self.send_cmd_to_move_forward)
         self.pushButton_move_backward.clicked.connect(self.send_cmd_to_move_backward)
         self.pushButton_show_origin.clicked.connect(self.__show_origin)
-        self.pushButton_pick_leaf.clicked.connect(self.send_leaf_location)
+
+        self.pushButton_pick_leaf.clicked.connect(self.start_pick_leaf)
         self.pushButton_car_stop.clicked.connect(self.send_cmd_to_stop_car)
         self.pushButton_luanch_all.clicked.connect(launch_all)
         self.pushButton_move_random.clicked.connect(self.send_cmd_to_move_random)
@@ -192,17 +217,24 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         action_up.triggered.connect(self.pushButton_move_forward.click)
         action_down = QAction(self)
         action_down.setShortcut(Qt.Key.Key_Down)
-        action_down.triggered.connect(self.pushButton_move_backward.click)
+
         action_left = QAction(self)
-        action_left.setShortcut(Qt.Key.Key_Left)
-        action_left.triggered.connect(self.pushButton_car_turn_left.click)
         action_right = QAction(self)
+        action_left.setShortcut(Qt.Key.Key_Left)
         action_right.setShortcut(Qt.Key.Key_Right)
-        action_right.triggered.connect(self.pushButton_car_turn_right.click)
         action_stop = QAction(self)
         action_stop.setShortcut(Qt.Key.Key_2)
-        action_stop.triggered.connect(self.pushButton_car_stop.click)
-        # 添加QAction对象到主窗口
+        if self.imitation_mode == 'CAR':
+            action_left.triggered.connect(self.pushButton_car_turn_left.click)
+            action_right.triggered.connect(self.pushButton_car_turn_right.click)
+            action_stop.triggered.connect(self.pushButton_car_stop.click)
+            action_down.triggered.connect(self.pushButton_move_backward.click)
+        else:
+            action_left.triggered.connect(lambda: self.send_cmd_cali_J1('l'))
+            action_right.triggered.connect(lambda: self.send_cmd_cali_J1('r'))
+            action_down.triggered.connect(lambda: self.send_cmd_cali_J1('p'))
+
+        # Add QAction to MainWindow
         self.addAction(action_up)
         self.addAction(action_down)
         self.addAction(action_left)
@@ -223,8 +255,21 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.show_mask_thread.timeout.connect(self.__show_mask)
         self.save_image_thread = SavaImage(200)
         self.save_image_thread.update_signal.connect(self.save_img)
+
         self.car_cmd_thread = CMD()
         self.car_cmd_thread.update_signal.connect(self.send_cmd_to_move_forward)
+
+        # 实例化线程对象
+        self.task_worker_thread = QThread()
+        # 实例化操作类
+        self.task_worker = PickWork(self.task_worker_thread, self.model_gripper, self.cali_model, self.encoder)
+        # 将操作类线程指向转移到新线程对象
+        self.task_worker.moveToThread(self.task_worker_thread)
+        # 将线程started信号绑定到操作类执行方法
+        self.task_worker_thread.started.connect(self.task_worker.start_task)
+        # # 线程退出销毁对象
+        # self.task_worker_thread.finished.connect(self.task_worker.deleteLater)
+        # self.task_worker_thread.finished.connect(self.task_worker_thread.deleteLater)
 
     def park_to_plant(self):
         self.show_yolo_thread.stop()
@@ -281,16 +326,20 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.show_mask_thread.start()
         self.data_thread.start()
 
+    @Slot(None)
     def send_leaf_location(self):
         self.data_thread.stop()
-        self.show_yolo_thread.stop()
-        self.show_rgb_thread.stop()
         picking_points = self.server.get_leaves_location(self.rgb_img, self.com.get_data_depth())
         cmd = Msg(ARMTASK.PICK_CLOSEST_LEAF, picking_points)
         print(picking_points)
         self.data_thread.start()
-        self.show_yolo_thread.start()
         self.com.send_cmd_arm(cmd)
+
+        # self.send_cmd_cali_pose(action_string)
+
+
+    def start_pick_leaf(self):
+        self.task_worker_thread.start()
 
     def cal_leaf_center(self):
         pass
@@ -357,6 +406,7 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         cmd = Msg(ARMTASK.READ_SERVO)
         self.com.send_cmd_arm(cmd)
         joint_list = self.com.receive_cmd_arm()
+        print(joint_list)
         self.spinBox_J1.setValue(joint_list[0])
         self.spinBox_J2.setValue(joint_list[1])
         self.spinBox_J3.setValue(joint_list[2])
@@ -369,8 +419,10 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.com.send_cmd_arm(cmd)
 
     def train_eye2hand(self):
+        self.save_image_thread.count = int(self.spinBox_trainig_amount.value())
         self.save_image_thread.start()
         train_amount = int(self.spinBox_trainig_amount.value())
+        print(train_amount)
         cmd = Msg(ARMTASK.MOVE_ARM_EYE2HAND, train_amount)
         self.com.send_cmd_arm(cmd)
 
@@ -391,6 +443,22 @@ class LeafBot(QWidget, Ui_LeafBotForm):
 
     def record_imitation_done(self):
         pass
+
+    def send_cmd_cali_J1(self, action='l'):
+        print('send_cmd_cali_J1:', action)
+
+        cmd = Msg(ARMTASK.CALI_J1_imitation, action)
+        self.com.send_cmd_arm(cmd)
+        self.save_rgb_img(key='joint1_nn')
+        order = -1 if action == 'l' else 1
+        if action == 'p':
+            order = 0
+
+        file.save_joint_cmd(order)
+
+    def send_cmd_cali_pose(self, action='l'):
+        cmd = Msg(ARMTASK.CALI_J1, action)
+        self.com.send_cmd_arm(cmd)
 
     """ The slot function for controlling the Car """
 
@@ -435,8 +503,8 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         file.save_file(directories, self.rgb_img, 'rgb')
         file.save_file(directories, self.com.get_data_depth(), 'depth')
 
-    def save_rgb_img(self):
-        file.save_file(directories, self.rgb_img, 'rgb')
+    def save_rgb_img(self, key='rgb'):
+        file.save_file(directories, self.rgb_img, key)
 
     def save_imitation(self, data):
         file.save_file(directories, data, 'imitation_car')
@@ -445,7 +513,6 @@ class LeafBot(QWidget, Ui_LeafBotForm):
         self.show_yolo_thread.stop()
         self.show_rgb_thread.stop()
         self.data_thread.stop()
-
         super().closeEvent(event)
 
 
@@ -461,7 +528,7 @@ class UpdateData(QThread):
         self.timer = QTimer()
         self.timer.timeout.connect(self.emitUpdateSignal)
         self.timer.start(100)  # Trigger 10FPS
-        self.timer.moveToThread(self)
+        # self.timer.moveToThread(self)
         self.exec()  # Start the event loop to keep the QTimer running
 
     def emitUpdateSignal(self):
@@ -484,7 +551,7 @@ class UpdateUI(QThread):
         timer = QTimer()
         timer.moveToThread(self)
         timer.timeout.connect(self.emitUpdateSignal)
-        timer.start(125)  # Trigger 8FPS
+        timer.start(250)  # Trigger 8FPS
         # Start the event loop to keep the QTimer running
         self.exec()
 
@@ -504,12 +571,13 @@ class SavaImage(QThread):
     def __init__(self, training_amount):
         super().__init__()
         self._is_running = True
-        self._count = training_amount
+        self.count = training_amount
 
     def run(self):
-        for i in range(self._count):
-            self.com.receive_cmd_arm()
-            self.update_signal.emit()
+        while self._is_running is True:
+            msg = self.com.receive_cmd_arm()
+            if msg == 1:
+                self.update_signal.emit()
         self.finished.emit()
         self.quit()
         self.wait()
@@ -522,17 +590,22 @@ class SavaImage(QThread):
 
 
 class CMD(QThread):
-    update_signal = Signal()
+    update_signal = Signal(np.ndarray)
+    com = Communicator()
+    server = ImagePostProcess()
 
     def __init__(self):
         super().__init__()
 
     def run(self):
-        timer = QTimer()
-        timer.moveToThread(self)
-        timer.timeout.connect(self.emitUpdateSignal)
-        timer.start(200)  # Trigger every 4FPS
-        self.exec()
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.emitUpdateSignal)
+        self.timer.setSingleShot(True)
+        self.timer.start(100)
+        self.timer.moveToThread(self)
+        self.finished.emit()
+        self.quit()
+        self.wait()
 
     def stop(self):
         self.finished.emit()
@@ -540,12 +613,81 @@ class CMD(QThread):
         self.wait()
 
     def emitUpdateSignal(self):
-        self.update_signal.emit()
+        print("start pick leaf")
+        picking_points, _ = self.server.get_leaves_location(self.com.get_data(), self.com.get_data_depth())
+        self.update_signal.emit(picking_points)
 
+
+# 线程锁
+lock = QMutex()
+
+
+# 操作类
+class PickWork(QObject):
+    send_task_signal = Signal(dict)
+    server = ImagePostProcess()
+    com = Communicator()
+
+    # 初始化时传入相关数据参数及线程对象
+    def __init__(self, thread, model,cali_model, encoder, parent=None) -> None:
+        super(PickWork, self).__init__(parent)
+        self.thread = thread
+        self.model_gripper = model
+        self.encoder = encoder
+        self.cali_model = cali_model
+
+    # 执行方法，启锁、关锁、执行动作、退出线程
+    def start_task(self):
+        lock.lock()
+        img = self.com.get_data()
+        picking_points, yolo_results = self.server.get_leaves_location(img, self.com.get_data_depth())
+        cmd = Msg(ARMTASK.PICK_CLOSEST_LEAF, picking_points)
+        self.com.send_cmd_arm(cmd)
+        pick_index,status = self.com.receive_cmd_arm()
+        print("interp", pick_index)
+        print('IK solution:', status)
+
+        interp= pca_pick_angle(img,yolo_results, self.server,pick_index)
+
+        cali_num = 0
+        action = self.predict()
+        while action!= 'p' and cali_num <= 2:
+            print(action)
+            if cali_num>=1 and prev_pred!=action:
+                action = 'p'
+            cmd = Msg(ARMTASK.CALI_J1, action)
+            self.com.send_cmd_arm(cmd)
+            self.com.receive_cmd_arm()
+            cali_num+=1
+            prev_pred = action
+        cmd = Msg(ARMTASK.CALI_J1, 'p')
+        self.com.send_cmd_arm(cmd)
+        self.com.receive_cmd_arm()
+        lock.unlock()
+        self.thread.quit()
+
+    def predict(self):
+        img = cali.preprocess(self.com.get_data(), self.model_gripper)
+        # Mapping predicted class index to labels -1, 0, 1
+        class_mapping = {0: -1, 1: 0, 2: 1}
+        outputs = self.cali_model(torch.tensor(img, dtype=torch.float32).unsqueeze(0).unsqueeze(0))
+        # Apply softmax to get probabilities
+        probabilities = F.softmax(outputs, dim=1)
+        # Convert probabilities to predicted class
+        _, predicted_class = torch.max(probabilities, 1)
+        # Map the predicted class index to labels -1, 0, 1
+        predicted_labels = [class_mapping[pred.item()] for pred in predicted_class][0]
+        if predicted_labels == -1:
+            action = 'l'
+        elif predicted_labels == 0:
+            action = 'p'
+        elif predicted_labels == 1:
+            action = 'r'
+        return action
 
 if __name__ == '__main__':
-    ssh.run_remote_stream()
     app = QApplication(sys.argv)
+    ssh.run_remote_stream()
     window = LeafBot()
     window.show()
     app.exec_()

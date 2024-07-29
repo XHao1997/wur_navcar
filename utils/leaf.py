@@ -55,7 +55,7 @@ def get_incircle(mask, cnts):
     the loop.
     """
     mask = np.zeros_like(mask).astype(np.uint8)
-    # cx, cy = (None, None)
+    cx, cy = (None, None)
     for cnt in cnts:
         M = cv2.moments(cnt)
         if M['m00'] != 0:
@@ -65,7 +65,7 @@ def get_incircle(mask, cnts):
             # Calculate Euclidean distance between each point in the contour and center1
             distances = np.linalg.norm(diff, axis=1)
             max_dist = min(distances)
-            cv2.circle(mask, (cx, cy), int(max_dist * 1), (255, 255, 255), -1)
+            cv2.circle(mask, (cx, cy), int(max_dist *0.8), (255, 255, 255), -1)
     return mask.astype(np.uint8), (cx, cy)
 
 
