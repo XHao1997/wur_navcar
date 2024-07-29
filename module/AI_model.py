@@ -11,7 +11,7 @@ from mobile_sam import sam_model_registry, SamPredictor
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from utils.image_process import convert_to_xyxy, remove_small_cnt, draw_yolo_fram_plt
+from utils.image_process import convert_to_xyxy, remove_small_cnt, draw_yolo_frame_plt
 from pathlib import Path
 from onnxruntime import InferenceSession
 from yolonnx.services import Detector
@@ -71,7 +71,7 @@ class Yolo():
         # Display the image
         ax.imshow(image)
         for i, detection in enumerate(results):
-            draw_yolo_fram_plt(ax, detection, i + 1)
+            draw_yolo_frame_plt(ax, detection, i + 1)
         # Show the plot
         plt.show()
 

@@ -16,7 +16,8 @@ class ARMTASK(Enum):
     SET_TORQUE = 11
     OFF_TORQUE = 12
     IMITATION_MOVE = 13
-
+    CALI_J1 = 14
+    CALI_J1_imitation = 15
 class Msg:
     def __init__(self, *args):
         if len(args) == 2:
